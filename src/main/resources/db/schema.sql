@@ -1,12 +1,74 @@
 -- 古代穿越人生模拟游戏 MVP 数据库结构
 -- 适用版本：MySQL 8.0+
--- 本脚本只负责建库、建表和约束，不写入业务初始数据。
+-- 本脚本负责建库、建表、约束和MVP地区基础数据。
 
 CREATE DATABASE IF NOT EXISTS `mvp`
     DEFAULT CHARACTER SET utf8mb4
     DEFAULT COLLATE utf8mb4_unicode_ci;
 
 USE `mvp`;
+
+CREATE TABLE IF NOT EXISTS `region_definition`
+(
+    `id`               CHAR(32)    NOT NULL COMMENT '地区ID',
+    `parent_id`        CHAR(32)    NULL COMMENT '上级行政区ID，根节点为空',
+    `region_code`      VARCHAR(64) NOT NULL COMMENT '稳定地区编码',
+    `region_name`      VARCHAR(64) NOT NULL COMMENT '地区显示名称',
+    `region_level`     VARCHAR(32) NOT NULL COMMENT '行政区等级：PROVINCE、CITY、COUNTY',
+    `enabled`          TINYINT(1)  NOT NULL DEFAULT 1 COMMENT '是否启用',
+    `sort_order`       INT         NOT NULL DEFAULT 0 COMMENT '同级显示顺序',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_region_definition_code` (`region_code`),
+    KEY `idx_region_definition_parent_sort` (`parent_id`, `sort_order`),
+    CONSTRAINT `fk_region_definition_parent`
+        FOREIGN KEY (`parent_id`) REFERENCES `region_definition` (`id`)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+    CONSTRAINT `chk_region_definition_level`
+        CHECK (`region_level` IN ('PROVINCE', 'CITY', 'COUNTY')),
+    CONSTRAINT `chk_region_definition_enabled`
+        CHECK (`enabled` IN (0, 1))
+) ENGINE = InnoDB
+  DEFAULT CHARACTER SET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci
+  COMMENT = '行政区划树';
+
+INSERT INTO `region_definition`
+    (`id`, `parent_id`, `region_code`, `region_name`, `region_level`, `enabled`, `sort_order`)
+VALUES
+    ('00000000000000000000000000000001', NULL, 'REGION_GUANGDONG', '广东省', 'PROVINCE', 1, 1)
+ON DUPLICATE KEY UPDATE
+    `parent_id` = VALUES(`parent_id`),
+    `region_name` = VALUES(`region_name`),
+    `region_level` = VALUES(`region_level`),
+    `enabled` = VALUES(`enabled`),
+    `sort_order` = VALUES(`sort_order`);
+
+INSERT INTO `region_definition`
+    (`id`, `parent_id`, `region_code`, `region_name`, `region_level`, `enabled`, `sort_order`)
+VALUES
+    ('00000000000000000000000000000002', '00000000000000000000000000000001', 'REGION_GUANGZHOU', '广州', 'CITY', 1, 1),
+    ('00000000000000000000000000000003', '00000000000000000000000000000001', 'REGION_HUIZHOU', '惠州', 'CITY', 1, 2)
+ON DUPLICATE KEY UPDATE
+    `parent_id` = VALUES(`parent_id`),
+    `region_name` = VALUES(`region_name`),
+    `region_level` = VALUES(`region_level`),
+    `enabled` = VALUES(`enabled`),
+    `sort_order` = VALUES(`sort_order`);
+
+INSERT INTO `region_definition`
+    (`id`, `parent_id`, `region_code`, `region_name`, `region_level`, `enabled`, `sort_order`)
+VALUES
+    ('00000000000000000000000000000004', '00000000000000000000000000000002', 'REGION_PANYU', '番禺县', 'COUNTY', 1, 1),
+    ('00000000000000000000000000000005', '00000000000000000000000000000002', 'REGION_NANHAI', '南海县', 'COUNTY', 1, 2),
+    ('00000000000000000000000000000006', '00000000000000000000000000000002', 'REGION_SHUNDE', '顺德县', 'COUNTY', 1, 3),
+    ('00000000000000000000000000000007', '00000000000000000000000000000003', 'REGION_BOLUO', '博罗县', 'COUNTY', 1, 1),
+    ('00000000000000000000000000000008', '00000000000000000000000000000003', 'REGION_HAIFENG', '海丰县', 'COUNTY', 1, 2)
+ON DUPLICATE KEY UPDATE
+    `parent_id` = VALUES(`parent_id`),
+    `region_name` = VALUES(`region_name`),
+    `region_level` = VALUES(`region_level`),
+    `enabled` = VALUES(`enabled`),
+    `sort_order` = VALUES(`sort_order`);
 
 CREATE TABLE IF NOT EXISTS `game_save`
 (
@@ -19,12 +81,11 @@ CREATE TABLE IF NOT EXISTS `game_save`
     `age`               INT         NOT NULL COMMENT '角色当前年龄',
     `total_turn_number` BIGINT      NOT NULL COMMENT '正常游戏阶段累计总回合编号',
     `growth_stage`      VARCHAR(32) NOT NULL COMMENT '角色当前成长阶段',
-    `random_seed`       BIGINT      NOT NULL COMMENT '存档固定随机种子',
     PRIMARY KEY (`id`),
     CONSTRAINT `chk_game_save_month`
         CHECK (`current_month` BETWEEN 1 AND 12),
     CONSTRAINT `chk_game_save_turn_in_month`
-        CHECK (`turn_in_month` BETWEEN 0 AND 4),
+        CHECK (`turn_in_month` BETWEEN 1 AND 4),
     CONSTRAINT `chk_game_save_age`
         CHECK (`age` >= 0),
     CONSTRAINT `chk_game_save_total_turn`
@@ -40,6 +101,8 @@ CREATE TABLE IF NOT EXISTS `game_character`
     `save_id`                   CHAR(32)     NOT NULL COMMENT '所属存档ID',
     `name`                      VARCHAR(64)  NOT NULL COMMENT '人物姓名',
     `type`                      TINYINT      NOT NULL COMMENT '控制类型：1为人类玩家，0为NPC',
+    `birth_region_id`           CHAR(32)     NOT NULL COMMENT '出生地区ID',
+    `current_region_id`         CHAR(32)     NOT NULL COMMENT '当前所在地区ID',
     `character_zhili`           INT          NOT NULL COMMENT '智力',
     `character_daode`           INT          NOT NULL COMMENT '道德',
     `character_zhengzhi`        INT          NOT NULL COMMENT '政治',
@@ -57,9 +120,16 @@ CREATE TABLE IF NOT EXISTS `game_character`
     UNIQUE KEY `uk_game_character_id_save` (`id`, `save_id`),
     KEY `idx_game_character_save_type` (`save_id`, `type`),
     KEY `idx_game_character_save_enabled` (`save_id`, `enabled`),
+    KEY `idx_game_character_current_region` (`current_region_id`),
     CONSTRAINT `fk_game_character_save`
         FOREIGN KEY (`save_id`) REFERENCES `game_save` (`id`)
             ON UPDATE RESTRICT ON DELETE CASCADE,
+    CONSTRAINT `fk_game_character_birth_region`
+        FOREIGN KEY (`birth_region_id`) REFERENCES `region_definition` (`id`)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+    CONSTRAINT `fk_game_character_current_region`
+        FOREIGN KEY (`current_region_id`) REFERENCES `region_definition` (`id`)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
     CONSTRAINT `chk_game_character_type`
         CHECK (`type` IN (0, 1)),
     CONSTRAINT `chk_game_character_health`
@@ -96,7 +166,7 @@ CREATE TABLE IF NOT EXISTS `character_career`
   COLLATE = utf8mb4_unicode_ci
   COMMENT = '人物职业记录';
 
-CREATE TABLE IF NOT EXISTS `career_shusheng_profile`
+CREATE TABLE IF NOT EXISTS `career_profile_shusheng`
 (
     `career_profile_id` CHAR(32) NOT NULL COMMENT '父职业档案ID，同时作为主键',
     `ability_shizi`     INT      NOT NULL DEFAULT 0 COMMENT '识字能力',
@@ -105,10 +175,10 @@ CREATE TABLE IF NOT EXISTS `career_shusheng_profile`
     `ability_celun`     INT      NOT NULL DEFAULT 0 COMMENT '策论能力',
     `ability_wenxue`    INT      NOT NULL DEFAULT 0 COMMENT '文学能力',
     PRIMARY KEY (`career_profile_id`),
-    CONSTRAINT `fk_career_shusheng_profile_career`
+    CONSTRAINT `fk_career_profile_shusheng_career`
         FOREIGN KEY (`career_profile_id`) REFERENCES `character_career` (`id`)
             ON UPDATE RESTRICT ON DELETE CASCADE,
-    CONSTRAINT `chk_career_shusheng_profile_abilities`
+    CONSTRAINT `chk_career_profile_shusheng_abilities`
         CHECK (`ability_shizi` >= 0
             AND `ability_jingyi` >= 0
             AND `ability_wenzhang` >= 0
@@ -119,23 +189,23 @@ CREATE TABLE IF NOT EXISTS `career_shusheng_profile`
   COLLATE = utf8mb4_unicode_ci
   COMMENT = '书生职业线能力';
 
-CREATE TABLE IF NOT EXISTS `family_state`
+CREATE TABLE IF NOT EXISTS `family_background`
 (
-    `id`                 CHAR(32) NOT NULL COMMENT '家庭状态记录ID',
+    `id`                 CHAR(32) NOT NULL COMMENT '初始家庭背景ID',
     `save_id`            CHAR(32) NOT NULL COMMENT '所属存档ID',
-    `wealth`             INT      NOT NULL COMMENT '家庭可用财富，单位为文',
-    `background_summary` TEXT     NOT NULL COMMENT '家庭背景摘要',
+    `initial_wealth`     INT      NOT NULL COMMENT '开局家庭财富，单位为文',
+    `background_summary` TEXT     NOT NULL COMMENT '开局时固定的家庭背景摘要',
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_family_state_save` (`save_id`),
-    CONSTRAINT `fk_family_state_save`
+    UNIQUE KEY `uk_family_background_save` (`save_id`),
+    CONSTRAINT `fk_family_background_save`
         FOREIGN KEY (`save_id`) REFERENCES `game_save` (`id`)
             ON UPDATE RESTRICT ON DELETE CASCADE,
-    CONSTRAINT `chk_family_state_wealth`
-        CHECK (`wealth` >= 0)
+    CONSTRAINT `chk_family_background_initial_wealth`
+        CHECK (`initial_wealth` BETWEEN 10000 AND 1000000)
 ) ENGINE = InnoDB
   DEFAULT CHARACTER SET = utf8mb4
   COLLATE = utf8mb4_unicode_ci
-  COMMENT = '家庭状态';
+  COMMENT = '角色开局时的家庭背景';
 
 CREATE TABLE IF NOT EXISTS `equipment_definition`
 (
@@ -162,8 +232,8 @@ CREATE TABLE IF NOT EXISTS `book_definition`
     `applicable_career_code`        VARCHAR(64)    NOT NULL COMMENT '适用职业编码',
     `reading_requirement_json`      JSON           NOT NULL COMMENT '固定结构的阅读条件',
     `difficulty`                    INT            NOT NULL COMMENT '阅读难度',
-    `required_progress`             DECIMAL(10, 4) NOT NULL COMMENT '完成阅读所需总进度',
-    `base_progress_per_turn`        DECIMAL(10, 4) NOT NULL COMMENT '单回合基础阅读进度',
+    `required_progress`             INT            NOT NULL COMMENT '完成阅读所需总进度',
+    `base_progress_per_turn`        INT            NOT NULL COMMENT '单回合基础阅读进度',
     `ability_shizi_weight`          TINYINT        NOT NULL COMMENT '识字收益权重百分比',
     `ability_jingyi_weight`         TINYINT        NOT NULL COMMENT '经义收益权重百分比',
     `ability_wenzhang_weight`       TINYINT        NOT NULL COMMENT '文章收益权重百分比',
@@ -235,7 +305,7 @@ CREATE TABLE IF NOT EXISTS `character_book_progress`
     `id`                     CHAR(32)       NOT NULL COMMENT '读书进度记录ID',
     `character_id`           CHAR(32)       NOT NULL COMMENT '人物ID',
     `equipment_id`           CHAR(32)       NOT NULL COMMENT '书籍装备定义ID',
-    `current_progress`       DECIMAL(10, 4) NOT NULL DEFAULT 0 COMMENT '当前阅读进度',
+    `current_progress`       INT            NOT NULL DEFAULT 0 COMMENT '当前阅读进度',
     `total_read_turn_number` INT            NOT NULL DEFAULT 0 COMMENT '累计阅读回合数',
     `completed`              TINYINT(1)     NOT NULL DEFAULT 0 COMMENT '是否读完',
     `last_read_turn_number`  BIGINT         NULL COMMENT '最后阅读时的总回合编号',
@@ -268,7 +338,7 @@ CREATE TABLE IF NOT EXISTS `event_record`
     `event_summary`             TEXT       NOT NULL COMMENT '人生节点或世界事件摘要',
     `related_character_id_json` JSON       NOT NULL COMMENT '相关人物ID组成的JSON数组',
     `occurred_turn_number`      BIGINT     NOT NULL COMMENT '事件发生时的总回合编号',
-    `settlement_result_json`    JSON       NOT NULL COMMENT '已校验并执行的结算结果',
+    `settlement_result_json`    JSON       NOT NULL COMMENT '已经执行的结算结果',
     `life_milestone`            TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否为人生节点',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_event_record_id_save` (`id`, `save_id`),
@@ -321,14 +391,14 @@ CREATE TABLE IF NOT EXISTS `exam_record`
     `request_id`                 VARCHAR(64)    NULL COMMENT '最终结算请求唯一ID',
     `exam_type`                  VARCHAR(64)    NOT NULL COMMENT '考试类型编码',
     `question_text`              TEXT           NOT NULL COMMENT '本次考试题目原文',
-    `pass_threshold`             DECIMAL(10, 4) NOT NULL COMMENT '通过分数线',
-    `base_ability_score`         DECIMAL(10, 4) NOT NULL COMMENT '基础能力分B',
-    `random_offset`              DECIMAL(10, 4) NOT NULL COMMENT '固定综合随机偏移R',
+    `pass_threshold`             INT            NOT NULL COMMENT '通过分数线',
+    `base_ability_score`         INT            NOT NULL COMMENT '基础能力分B',
+    `state_offset`               INT            NOT NULL COMMENT '固定身体状态偏移R',
     `ai_thought_bubble`          TEXT           NOT NULL COMMENT 'AI生成的思维泡泡',
     `player_choice`              VARCHAR(32)    NULL COMMENT '系统代行或以身入局',
     `player_input`               TEXT           NULL COMMENT '玩家亲自输入的答案原文',
-    `ai_player_content_modifier` DECIMAL(10, 4) NULL COMMENT 'AI评价玩家答案产生的内容修正M',
-    `final_score`                DECIMAL(10, 4) NULL COMMENT '最终分数',
+    `ai_player_content_modifier` INT            NULL COMMENT 'AI评价玩家答案产生的内容修正M',
+    `final_score`                INT            NULL COMMENT '最终分数',
     `status`                     VARCHAR(32)    NOT NULL COMMENT '考试当前状态或最终结果',
     `ai_answer_text`             TEXT           NULL COMMENT '系统代行生成的展示答卷',
     `ai_content`                 TEXT           NULL COMMENT 'AI生成的评价与结果叙事',

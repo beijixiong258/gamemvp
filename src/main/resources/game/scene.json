@@ -10,8 +10,8 @@
     {
       "sceneCode": "SCENE_SISHU",
       "sceneName": "私塾",
-      "description": "玩家读书、练习文章和向先生或同窗请教的场景。",
-      "availableActionCode": ["READ_BOOK", "PRACTICE_WRITING", "FREE_ACTION", "NPC_DIALOGUE"],
+      "description": "玩家读书、练习文章、参加阶段考试和向先生或同窗请教的场景。",
+      "availableActionCode": ["READ_BOOK", "PRACTICE_WRITING", "FREE_ACTION", "NPC_DIALOGUE", "EXAM_AUTO", "EXAM_PLAYER"],
       "availableNpcCode": ["NPC_XIANSHENG", "NPC_JIAHAO"]
     },
     {

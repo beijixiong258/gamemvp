@@ -18,11 +18,11 @@
     },
     {
       "textCode": "TEXT_EXAM_PASS",
-      "template": "县试已结算，你通过了本次考试。"
+      "template": "考试已结算，你通过了本次考试。"
     },
     {
       "textCode": "TEXT_EXAM_FAIL",
-      "template": "县试已结算，你本次未能通过。"
+      "template": "考试已结算，你本次未能通过。"
     }
   ]
 }

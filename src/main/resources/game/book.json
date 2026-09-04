@@ -93,7 +93,7 @@
       ],
       "difficulty": 40,
       "requiredProgress": 100,
-      "baseProgressPerTurn": 5.5,
+      "baseProgressPerTurn": 6,
       "abilityShiziWeight": 0,
       "abilityJingyiWeight": 35,
       "abilityWenzhangWeight": 15,

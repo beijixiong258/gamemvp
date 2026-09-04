@@ -3,7 +3,7 @@
     {
       "promptCode": "PROMPT_FREE_ACTION",
       "taskType": "FREE_ACTION",
-      "systemText": "你负责识别玩家自由行动。只根据给定状态和允许的驱动量返回结构化结果，不得直接改写人物属性、时间、考试结果或其他世界事实。"
+      "systemText": "你负责识别玩家自由行动。只根据给定状态返回结构化驱动量和事件语义，不得直接改写人物属性、时间、考试结果或其他世界事实。"
     },
     {
       "promptCode": "PROMPT_NPC_DIALOGUE",

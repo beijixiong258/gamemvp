@@ -1,10 +1,110 @@
 {
   "exam": [
     {
+      "examType": "EXAM_MENGXUE",
+      "examName": "蒙学阶段考",
+      "triggerAge": 8,
+      "sceneCode": "SCENE_SISHU",
+      "finalExam": false,
+      "question": [
+        {
+          "questionCode": "EXAM_MENGXUE_001",
+          "questionText": "请说说近日所读篇目的大意，并写出其中最重要的一句话。",
+          "passThreshold": 35,
+          "generalAbilityWeight": {
+            "characterZhili": 0.20,
+            "characterDaode": 0.05,
+            "characterZhengzhi": 0.00,
+            "characterJiaoji": 0.05,
+            "characterTineng": 0.05
+          },
+          "careerAbilityWeight": {
+            "abilityShizi": 0.35,
+            "abilityJingyi": 0.10,
+            "abilityWenzhang": 0.05,
+            "abilityCelun": 0.00,
+            "abilityWenxue": 0.05
+          },
+          "knowledgeWeight": 0.10,
+          "scoringPoint": ["准确复述篇目大意", "能写出关键语句", "表达清楚"],
+          "thoughtPromptCode": "PROMPT_EXAM_THOUGHT",
+          "evaluationPromptCode": "PROMPT_EXAM_EVALUATION",
+          "answerPromptCode": "PROMPT_EXAM_ANSWER"
+        }
+      ]
+    },
+    {
+      "examType": "EXAM_JINGYI",
+      "examName": "经义阶段考",
+      "triggerAge": 12,
+      "sceneCode": "SCENE_SISHU",
+      "finalExam": false,
+      "question": [
+        {
+          "questionCode": "EXAM_JINGYI_001",
+          "questionText": "请选择一段熟悉的经文，说明它教人如何立身。",
+          "passThreshold": 45,
+          "generalAbilityWeight": {
+            "characterZhili": 0.15,
+            "characterDaode": 0.08,
+            "characterZhengzhi": 0.02,
+            "characterJiaoji": 0.03,
+            "characterTineng": 0.02
+          },
+          "careerAbilityWeight": {
+            "abilityShizi": 0.15,
+            "abilityJingyi": 0.25,
+            "abilityWenzhang": 0.10,
+            "abilityCelun": 0.05,
+            "abilityWenxue": 0.05
+          },
+          "knowledgeWeight": 0.10,
+          "scoringPoint": ["经文理解准确", "能联系立身之道", "论述前后连贯"],
+          "thoughtPromptCode": "PROMPT_EXAM_THOUGHT",
+          "evaluationPromptCode": "PROMPT_EXAM_EVALUATION",
+          "answerPromptCode": "PROMPT_EXAM_ANSWER"
+        }
+      ]
+    },
+    {
+      "examType": "EXAM_PRE_COUNTY",
+      "examName": "县试预考",
+      "triggerAge": 15,
+      "sceneCode": "SCENE_SISHU",
+      "finalExam": false,
+      "question": [
+        {
+          "questionCode": "EXAM_PRE_COUNTY_001",
+          "questionText": "地方遇到歉收时，读书人应当如何自处，又能为乡里做些什么？",
+          "passThreshold": 52,
+          "generalAbilityWeight": {
+            "characterZhili": 0.15,
+            "characterDaode": 0.05,
+            "characterZhengzhi": 0.05,
+            "characterJiaoji": 0.02,
+            "characterTineng": 0.03
+          },
+          "careerAbilityWeight": {
+            "abilityShizi": 0.10,
+            "abilityJingyi": 0.20,
+            "abilityWenzhang": 0.15,
+            "abilityCelun": 0.10,
+            "abilityWenxue": 0.05
+          },
+          "knowledgeWeight": 0.10,
+          "scoringPoint": ["兼顾修身与乡里责任", "提出可行办法", "行文有条理"],
+          "thoughtPromptCode": "PROMPT_EXAM_THOUGHT",
+          "evaluationPromptCode": "PROMPT_EXAM_EVALUATION",
+          "answerPromptCode": "PROMPT_EXAM_ANSWER"
+        }
+      ]
+    },
+    {
       "examType": "EXAM_XIANSHI",
       "examName": "县试",
       "triggerAge": 16,
       "sceneCode": "SCENE_XIANSHI",
+      "finalExam": true,
       "question": [
         {
           "questionCode": "EXAM_XIANSHI_001",
@@ -25,8 +125,6 @@
             "abilityWenxue": 0.05
           },
           "knowledgeWeight": 0.10,
-          "randomOffsetMin": -5,
-          "randomOffsetMax": 5,
           "scoringPoint": ["说明读书与修身的关系", "说明修身如何影响处世", "论述前后连贯"],
           "thoughtPromptCode": "PROMPT_EXAM_THOUGHT",
           "evaluationPromptCode": "PROMPT_EXAM_EVALUATION",
