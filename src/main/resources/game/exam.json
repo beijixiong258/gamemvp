@@ -1,0 +1,38 @@
+{
+  "exam": [
+    {
+      "examType": "EXAM_XIANSHI",
+      "examName": "县试",
+      "triggerAge": 16,
+      "sceneCode": "SCENE_XIANSHI",
+      "question": [
+        {
+          "questionCode": "EXAM_XIANSHI_001",
+          "questionText": "人为何要读书？请结合所学，说明修身与处世的关系。",
+          "passThreshold": 60,
+          "generalAbilityWeight": {
+            "characterZhili": 0.18,
+            "characterDaode": 0.08,
+            "characterZhengzhi": 0.04,
+            "characterJiaoji": 0.00,
+            "characterTineng": 0.05
+          },
+          "careerAbilityWeight": {
+            "abilityShizi": 0.08,
+            "abilityJingyi": 0.18,
+            "abilityWenzhang": 0.14,
+            "abilityCelun": 0.10,
+            "abilityWenxue": 0.05
+          },
+          "knowledgeWeight": 0.10,
+          "randomOffsetMin": -5,
+          "randomOffsetMax": 5,
+          "scoringPoint": ["说明读书与修身的关系", "说明修身如何影响处世", "论述前后连贯"],
+          "thoughtPromptCode": "PROMPT_EXAM_THOUGHT",
+          "evaluationPromptCode": "PROMPT_EXAM_EVALUATION",
+          "answerPromptCode": "PROMPT_EXAM_ANSWER"
+        }
+      ]
+    }
+  ]
+}

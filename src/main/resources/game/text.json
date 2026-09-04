@@ -1,0 +1,28 @@
+{
+  "text": [
+    {
+      "textCode": "TEXT_READ_BOOK_RESULT",
+      "template": "本回合阅读了《{{bookName}}》，进度增加{{progressDelta}}，疲劳变化{{fatigueDelta}}。"
+    },
+    {
+      "textCode": "TEXT_PRACTICE_WRITING_RESULT",
+      "template": "你完成了一次文章练习，文章能力增加{{abilityDelta}}，疲劳变化{{fatigueDelta}}。"
+    },
+    {
+      "textCode": "TEXT_REST_RESULT",
+      "template": "你休息了一个回合，疲劳降低{{fatigueDelta}}，健康恢复{{healthDelta}}。"
+    },
+    {
+      "textCode": "TEXT_ACTION_REJECTED",
+      "template": "当前无法进行该行动：{{reason}}。"
+    },
+    {
+      "textCode": "TEXT_EXAM_PASS",
+      "template": "县试已结算，你通过了本次考试。"
+    },
+    {
+      "textCode": "TEXT_EXAM_FAIL",
+      "template": "县试已结算，你本次未能通过。"
+    }
+  ]
+}

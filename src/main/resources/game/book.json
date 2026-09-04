@@ -1,0 +1,150 @@
+{
+  "book": [
+    {
+      "equipmentCode": "BOOK_SANZIJING",
+      "applicableCareerCode": "CAREER_SHUSHENG",
+      "readingRequirement": [
+        { "type": "MIN_AGE", "value": 6 },
+        { "type": "CURRENT_CAREER", "target": "CAREER_SHUSHENG" }
+      ],
+      "difficulty": 10,
+      "requiredProgress": 100,
+      "baseProgressPerTurn": 10,
+      "abilityShiziWeight": 80,
+      "abilityJingyiWeight": 20,
+      "abilityWenzhangWeight": 0,
+      "abilityCelunWeight": 0,
+      "abilityWenxueWeight": 0,
+      "fatigueCost": 2,
+      "knowledgeChushiSummary": "能够辨认书中部分常用字。",
+      "knowledgeKeyongSummary": "能够复述主要句段并理解蒙学大意。",
+      "knowledgeZhangwoSummary": "能够熟练运用书中的常用字句和基础训诫。"
+    },
+    {
+      "equipmentCode": "BOOK_QIANZIWEN",
+      "applicableCareerCode": "CAREER_SHUSHENG",
+      "readingRequirement": [
+        { "type": "MIN_AGE", "value": 6 },
+        { "type": "CURRENT_CAREER", "target": "CAREER_SHUSHENG" }
+      ],
+      "difficulty": 12,
+      "requiredProgress": 100,
+      "baseProgressPerTurn": 9,
+      "abilityShiziWeight": 60,
+      "abilityJingyiWeight": 0,
+      "abilityWenzhangWeight": 0,
+      "abilityCelunWeight": 0,
+      "abilityWenxueWeight": 40,
+      "fatigueCost": 2,
+      "knowledgeChushiSummary": "能够辨认部分字词和常见典故。",
+      "knowledgeKeyongSummary": "能够理解主要句段并积累基础文辞。",
+      "knowledgeZhangwoSummary": "能够熟练引用其中字句并理解篇章脉络。"
+    },
+    {
+      "equipmentCode": "BOOK_LUNYU",
+      "applicableCareerCode": "CAREER_SHUSHENG",
+      "readingRequirement": [
+        { "type": "MIN_AGE", "value": 8 },
+        { "type": "MIN_CAREER_ABILITY", "target": "abilityShizi", "value": 20 },
+        { "type": "BOOK_PROGRESS", "target": "BOOK_SANZIJING", "value": 60 }
+      ],
+      "difficulty": 25,
+      "requiredProgress": 100,
+      "baseProgressPerTurn": 7,
+      "abilityShiziWeight": 0,
+      "abilityJingyiWeight": 65,
+      "abilityWenzhangWeight": 20,
+      "abilityCelunWeight": 15,
+      "abilityWenxueWeight": 0,
+      "fatigueCost": 3,
+      "knowledgeChushiSummary": "记得少量关于学习和修身的章句。",
+      "knowledgeKeyongSummary": "能够用部分章句解释修身与处世问题。",
+      "knowledgeZhangwoSummary": "能够结合多篇章句完整讨论学习、仁德和礼的关系。"
+    },
+    {
+      "equipmentCode": "BOOK_MENGZI",
+      "applicableCareerCode": "CAREER_SHUSHENG",
+      "readingRequirement": [
+        { "type": "MIN_AGE", "value": 10 },
+        { "type": "MIN_GENERAL_ATTRIBUTE", "target": "characterZhili", "value": 40 },
+        { "type": "MIN_CAREER_ABILITY", "target": "abilityShizi", "value": 45 },
+        { "type": "BOOK_PROGRESS", "target": "BOOK_LUNYU", "value": 60 }
+      ],
+      "difficulty": 45,
+      "requiredProgress": 100,
+      "baseProgressPerTurn": 5,
+      "abilityShiziWeight": 0,
+      "abilityJingyiWeight": 45,
+      "abilityWenzhangWeight": 30,
+      "abilityCelunWeight": 25,
+      "abilityWenxueWeight": 0,
+      "fatigueCost": 5,
+      "knowledgeChushiSummary": "知道性善、义利等核心议题。",
+      "knowledgeKeyongSummary": "能够围绕义理提出较清晰的论点。",
+      "knowledgeZhangwoSummary": "能够援引篇章并完整辨析义利、民本和修养问题。"
+    },
+    {
+      "equipmentCode": "BOOK_DAXUE",
+      "applicableCareerCode": "CAREER_SHUSHENG",
+      "readingRequirement": [
+        { "type": "MIN_AGE", "value": 10 },
+        { "type": "MIN_GENERAL_ATTRIBUTE", "target": "characterZhili", "value": 45 },
+        { "type": "MIN_GENERAL_ATTRIBUTE", "target": "characterZhengzhi", "value": 25 }
+      ],
+      "difficulty": 40,
+      "requiredProgress": 100,
+      "baseProgressPerTurn": 5.5,
+      "abilityShiziWeight": 0,
+      "abilityJingyiWeight": 35,
+      "abilityWenzhangWeight": 15,
+      "abilityCelunWeight": 50,
+      "abilityWenxueWeight": 0,
+      "fatigueCost": 4,
+      "knowledgeChushiSummary": "知道修身、齐家与治事之间存在次序。",
+      "knowledgeKeyongSummary": "能够说明个人修养与公共事务的联系。",
+      "knowledgeZhangwoSummary": "能够完整运用格物、诚意、修身等脉络分析治事问题。"
+    },
+    {
+      "equipmentCode": "BOOK_SHIJING",
+      "applicableCareerCode": "CAREER_SHUSHENG",
+      "readingRequirement": [
+        { "type": "MIN_AGE", "value": 10 },
+        { "type": "MIN_GENERAL_ATTRIBUTE", "target": "characterZhili", "value": 40 },
+        { "type": "MIN_CAREER_ABILITY", "target": "abilityShizi", "value": 35 }
+      ],
+      "difficulty": 35,
+      "requiredProgress": 100,
+      "baseProgressPerTurn": 6,
+      "abilityShiziWeight": 0,
+      "abilityJingyiWeight": 20,
+      "abilityWenzhangWeight": 10,
+      "abilityCelunWeight": 0,
+      "abilityWenxueWeight": 70,
+      "fatigueCost": 4,
+      "knowledgeChushiSummary": "记得少量诗句和意象。",
+      "knowledgeKeyongSummary": "能够理解常见诗篇的情感与表达。",
+      "knowledgeZhangwoSummary": "能够恰当地引用诗句并分析其中的人情与讽谏。"
+    },
+    {
+      "equipmentCode": "BOOK_MINGJIAWENCHAO",
+      "applicableCareerCode": "CAREER_SHUSHENG",
+      "readingRequirement": [
+        { "type": "MIN_AGE", "value": 12 },
+        { "type": "MIN_GENERAL_ATTRIBUTE", "target": "characterZhili", "value": 55 },
+        { "type": "MIN_CAREER_ABILITY", "target": "abilityWenzhang", "value": 35 }
+      ],
+      "difficulty": 60,
+      "requiredProgress": 100,
+      "baseProgressPerTurn": 4,
+      "abilityShiziWeight": 0,
+      "abilityJingyiWeight": 0,
+      "abilityWenzhangWeight": 60,
+      "abilityCelunWeight": 25,
+      "abilityWenxueWeight": 15,
+      "fatigueCost": 6,
+      "knowledgeChushiSummary": "能够辨认几种常见文章章法。",
+      "knowledgeKeyongSummary": "能够模仿名家文章组织论点和段落。",
+      "knowledgeZhangwoSummary": "能够根据题意选择章法并形成完整、连贯的论说。"
+    }
+  ]
+}

@@ -2,11 +2,24 @@ spring:
   application:
     name: mvp
 
+  config:
+    import: "optional:file:./.env[.properties]"
+
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3307/mvp?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
     username: root
     password: "030206"
+
+  ai:
+    openai:
+      api-key: ${MIMO_API_KEY}
+      base-url: https://api.xiaomimimo.com/v1
+      chat:
+        options:
+          model: mimo-v2.5
+          temperature: 0.2
+          max-completion-tokens: 3000
 
 mybatis-plus:
   configuration:

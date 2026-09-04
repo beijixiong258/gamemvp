@@ -1,0 +1,60 @@
+{
+  "equipment": [
+    {
+      "equipmentCode": "BOOK_SANZIJING",
+      "equipmentName": "三字经",
+      "equipmentType": "BOOK",
+      "rarityCode": "COMMON",
+      "price": 50,
+      "description": "适合蒙学启蒙的常见读物。"
+    },
+    {
+      "equipmentCode": "BOOK_QIANZIWEN",
+      "equipmentName": "千字文",
+      "equipmentType": "BOOK",
+      "rarityCode": "COMMON",
+      "price": 60,
+      "description": "用于识字和积累基础文辞的蒙学读物。"
+    },
+    {
+      "equipmentCode": "BOOK_LUNYU",
+      "equipmentName": "论语",
+      "equipmentType": "BOOK",
+      "rarityCode": "COMMON",
+      "price": 120,
+      "description": "书生研习经义与修身思想的基础典籍。"
+    },
+    {
+      "equipmentCode": "BOOK_MENGZI",
+      "equipmentName": "孟子",
+      "equipmentType": "BOOK",
+      "rarityCode": "UNCOMMON",
+      "price": 180,
+      "description": "侧重义理辨析和论说能力的进阶典籍。"
+    },
+    {
+      "equipmentCode": "BOOK_DAXUE",
+      "equipmentName": "大学",
+      "equipmentType": "BOOK",
+      "rarityCode": "UNCOMMON",
+      "price": 160,
+      "description": "讨论修身、齐家与治事次序的典籍。"
+    },
+    {
+      "equipmentCode": "BOOK_SHIJING",
+      "equipmentName": "诗经",
+      "equipmentType": "BOOK",
+      "rarityCode": "UNCOMMON",
+      "price": 200,
+      "description": "培养文学感受和文辞表达的诗歌典籍。"
+    },
+    {
+      "equipmentCode": "BOOK_MINGJIAWENCHAO",
+      "equipmentName": "名家文钞",
+      "equipmentType": "BOOK",
+      "rarityCode": "RARE",
+      "price": 500,
+      "description": "收录名家文章、用于揣摩章法的稀有选本。"
+    }
+  ]
+}

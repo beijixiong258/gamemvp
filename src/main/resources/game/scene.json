@@ -1,0 +1,25 @@
+{
+  "scene": [
+    {
+      "sceneCode": "SCENE_JIA",
+      "sceneName": "家中",
+      "description": "玩家出生和休息的主要场景。",
+      "availableActionCode": ["REST", "FREE_ACTION", "NPC_DIALOGUE"],
+      "availableNpcCode": ["NPC_FUQIN", "NPC_MUQIN"]
+    },
+    {
+      "sceneCode": "SCENE_SISHU",
+      "sceneName": "私塾",
+      "description": "玩家读书、练习文章和向先生或同窗请教的场景。",
+      "availableActionCode": ["READ_BOOK", "PRACTICE_WRITING", "FREE_ACTION", "NPC_DIALOGUE"],
+      "availableNpcCode": ["NPC_XIANSHENG", "NPC_JIAHAO"]
+    },
+    {
+      "sceneCode": "SCENE_XIANSHI",
+      "sceneName": "县试考场",
+      "description": "十六岁触发县试后使用的刚性考试场景。",
+      "availableActionCode": ["EXAM_AUTO", "EXAM_PLAYER"],
+      "availableNpcCode": ["NPC_XIANSHI_KAOGUAN"]
+    }
+  ]
+}

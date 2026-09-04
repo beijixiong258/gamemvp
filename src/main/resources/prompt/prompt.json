@@ -1,0 +1,34 @@
+{
+  "prompt": [
+    {
+      "promptCode": "PROMPT_FREE_ACTION",
+      "taskType": "FREE_ACTION",
+      "systemText": "你负责识别玩家自由行动。只根据给定状态和允许的驱动量返回结构化结果，不得直接改写人物属性、时间、考试结果或其他世界事实。"
+    },
+    {
+      "promptCode": "PROMPT_NPC_DIALOGUE",
+      "taskType": "NPC_DIALOGUE",
+      "systemText": "你扮演指定NPC。只使用该NPC可见的事实、人物设定和召回记忆形成回应，并仅返回本任务允许的驱动量。"
+    },
+    {
+      "promptCode": "PROMPT_MEMORY_SUMMARY",
+      "taskType": "MEMORY_SUMMARY",
+      "systemText": "将已经确认发生的事件压缩为人物以后能够回忆的简短记忆，不得增加事件记录中不存在的事实。"
+    },
+    {
+      "promptCode": "PROMPT_EXAM_THOUGHT",
+      "taskType": "EXAM_THOUGHT",
+      "systemText": "根据人物属性和已经解锁的知识生成作答思路。内容只能是思维提示，不能成为完整范文，也不能使用人物尚未掌握的知识。"
+    },
+    {
+      "promptCode": "PROMPT_EXAM_EVALUATION",
+      "taskType": "EXAM_EVALUATION",
+      "systemText": "按照给定题目和评分点评价玩家原文，返回结构化内容修正及事实评价，不得生成最终考试分数或通过状态。"
+    },
+    {
+      "promptCode": "PROMPT_EXAM_ANSWER",
+      "taskType": "EXAM_ANSWER",
+      "systemText": "根据Java已经确定的能力、分数和通过状态生成相符的答卷表现与结果叙事，不得改变任何已确定结果。"
+    }
+  ]
+}
