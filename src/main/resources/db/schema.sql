@@ -72,6 +72,7 @@ ON DUPLICATE KEY UPDATE
 
 CREATE TABLE IF NOT EXISTS `game_save`
 (
+    `created_at`         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `id`                CHAR(32)    NOT NULL COMMENT '存档ID',
     `status`            VARCHAR(32) NOT NULL COMMENT '存档当前流程状态',
     `birth_year`        INT         NOT NULL COMMENT '角色出生年份',
@@ -101,6 +102,13 @@ CREATE TABLE IF NOT EXISTS `game_character`
     `save_id`                   CHAR(32)     NOT NULL COMMENT '所属存档ID',
     `name`                      VARCHAR(64)  NOT NULL COMMENT '人物姓名',
     `type`                      TINYINT      NOT NULL COMMENT '控制类型：1为人类玩家，0为NPC',
+    `npc_code`                  VARCHAR(64)  NULL COMMENT 'NPC模板编码，玩家为空',
+    `wallet`                    INT          NOT NULL DEFAULT 2000 COMMENT '可支配资金，单位为文',
+    `sick_turns_remaining`      INT          NOT NULL DEFAULT 0 COMMENT '重病待强制经过回合',
+    `official_position`         VARCHAR(128) NULL COMMENT '当前官职',
+    `official_rank`             VARCHAR(64)  NULL COMMENT '官职级别',
+    `degree`                    VARCHAR(64)  NULL COMMENT '学位或功名',
+    `titles_json`               JSON         NOT NULL COMMENT '可并存的称号头衔数组',
     `birth_region_id`           CHAR(32)     NOT NULL COMMENT '出生地区ID',
     `current_region_id`         CHAR(32)     NOT NULL COMMENT '当前所在地区ID',
     `character_zhili`           INT          NOT NULL COMMENT '智力',
@@ -110,7 +118,6 @@ CREATE TABLE IF NOT EXISTS `game_character`
     `character_tineng`          INT          NOT NULL COMMENT '体能',
     `character_jiankang`        INT          NOT NULL COMMENT '当前健康值',
     `character_pilao`           INT          NOT NULL COMMENT '当前疲劳值',
-    `current_main_career_code`  VARCHAR(64)  NOT NULL COMMENT '当前主职业编码',
     `birthday`                  VARCHAR(32)  NOT NULL COMMENT '游戏纪年中的生日',
     `personality_summary`       TEXT         NULL COMMENT '性格与行为倾向摘要',
     `current_state`             TEXT         NULL COMMENT '当前状态摘要',
@@ -118,6 +125,7 @@ CREATE TABLE IF NOT EXISTS `game_character`
     `enabled`                   TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '是否启用',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_game_character_id_save` (`id`, `save_id`),
+    UNIQUE KEY `uk_game_character_save_npc` (`save_id`, `npc_code`),
     KEY `idx_game_character_save_type` (`save_id`, `type`),
     KEY `idx_game_character_save_enabled` (`save_id`, `enabled`),
     KEY `idx_game_character_current_region` (`current_region_id`),
@@ -143,41 +151,26 @@ CREATE TABLE IF NOT EXISTS `game_character`
   COLLATE = utf8mb4_unicode_ci
   COMMENT = '游戏人物';
 
-CREATE TABLE IF NOT EXISTS `character_career`
-(
-    `id`                      CHAR(32)    NOT NULL COMMENT '职业档案ID',
-    `character_id`            CHAR(32)    NOT NULL COMMENT '所属人物ID',
-    `career_code`             VARCHAR(64) NOT NULL COMMENT '职业编码',
-    `unlock_turn_number`      BIGINT      NOT NULL COMMENT '进入职业线时的总回合编号',
-    `last_active_turn_number` BIGINT      NULL COMMENT '最后一次以该职业活动时的总回合编号',
-    `status`                  VARCHAR(32) NOT NULL COMMENT '职业档案状态',
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_character_career_character_code` (`character_id`, `career_code`),
-    KEY `idx_character_career_character_status` (`character_id`, `status`),
-    CONSTRAINT `fk_character_career_character`
-        FOREIGN KEY (`character_id`) REFERENCES `game_character` (`id`)
-            ON UPDATE RESTRICT ON DELETE CASCADE,
-    CONSTRAINT `chk_character_career_unlock_turn`
-        CHECK (`unlock_turn_number` >= 0),
-    CONSTRAINT `chk_character_career_last_active_turn`
-        CHECK (`last_active_turn_number` IS NULL OR `last_active_turn_number` >= `unlock_turn_number`)
-) ENGINE = InnoDB
-  DEFAULT CHARACTER SET = utf8mb4
-  COLLATE = utf8mb4_unicode_ci
-  COMMENT = '人物职业记录';
-
 CREATE TABLE IF NOT EXISTS `career_profile_shusheng`
 (
-    `career_profile_id` CHAR(32) NOT NULL COMMENT '父职业档案ID，同时作为主键',
-    `ability_shizi`     INT      NOT NULL DEFAULT 0 COMMENT '识字能力',
-    `ability_jingyi`    INT      NOT NULL DEFAULT 0 COMMENT '经义能力',
-    `ability_wenzhang`  INT      NOT NULL DEFAULT 0 COMMENT '文章能力',
-    `ability_celun`     INT      NOT NULL DEFAULT 0 COMMENT '策论能力',
-    `ability_wenxue`    INT      NOT NULL DEFAULT 0 COMMENT '文学能力',
-    PRIMARY KEY (`career_profile_id`),
-    CONSTRAINT `fk_career_profile_shusheng_career`
-        FOREIGN KEY (`career_profile_id`) REFERENCES `character_career` (`id`)
+    `id`                     CHAR(32)    NOT NULL COMMENT '书生领域档案ID',
+    `character_id`            CHAR(32)    NOT NULL COMMENT '所属人物ID',
+    `unlock_turn_number`      BIGINT      NOT NULL COMMENT '首次建立书生领域档案时的总回合编号',
+    `last_active_turn_number` BIGINT      NULL COMMENT '最后参与书生领域行动时的总回合编号',
+    `ability_shizi`           INT         NOT NULL DEFAULT 0 COMMENT '识字能力',
+    `ability_jingyi`          INT         NOT NULL DEFAULT 0 COMMENT '经义能力',
+    `ability_wenzhang`        INT         NOT NULL DEFAULT 0 COMMENT '文章能力',
+    `ability_celun`           INT         NOT NULL DEFAULT 0 COMMENT '策论能力',
+    `ability_wenxue`          INT         NOT NULL DEFAULT 0 COMMENT '文学能力',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_career_profile_shusheng_character` (`character_id`),
+    CONSTRAINT `fk_career_profile_shusheng_character`
+        FOREIGN KEY (`character_id`) REFERENCES `game_character` (`id`)
             ON UPDATE RESTRICT ON DELETE CASCADE,
+    CONSTRAINT `chk_career_profile_shusheng_unlock_turn`
+        CHECK (`unlock_turn_number` >= 0),
+    CONSTRAINT `chk_career_profile_shusheng_last_active_turn`
+        CHECK (`last_active_turn_number` IS NULL OR `last_active_turn_number` >= `unlock_turn_number`),
     CONSTRAINT `chk_career_profile_shusheng_abilities`
         CHECK (`ability_shizi` >= 0
             AND `ability_jingyi` >= 0
@@ -187,7 +180,7 @@ CREATE TABLE IF NOT EXISTS `career_profile_shusheng`
 ) ENGINE = InnoDB
   DEFAULT CHARACTER SET = utf8mb4
   COLLATE = utf8mb4_unicode_ci
-  COMMENT = '书生职业线能力';
+  COMMENT = '书生领域档案';
 
 CREATE TABLE IF NOT EXISTS `family_background`
 (
@@ -215,6 +208,7 @@ CREATE TABLE IF NOT EXISTS `equipment_definition`
     `equipment_type` VARCHAR(32)  NOT NULL COMMENT '装备类型编码',
     `rarity_code`    VARCHAR(32)  NOT NULL COMMENT '稀有度编码',
     `price`          INT          NOT NULL COMMENT '价格，单位为文',
+    `supplier_npc_code` VARCHAR(64) NOT NULL COMMENT '供应NPC模板编码',
     `description`    TEXT         NOT NULL COMMENT '基础介绍',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_equipment_definition_code` (`equipment_code`),
@@ -229,7 +223,7 @@ CREATE TABLE IF NOT EXISTS `equipment_definition`
 CREATE TABLE IF NOT EXISTS `book_definition`
 (
     `equipment_id`                  CHAR(32)       NOT NULL COMMENT '父装备定义ID，同时作为主键',
-    `applicable_career_code`        VARCHAR(64)    NOT NULL COMMENT '适用职业编码',
+    `growth_domain_code`            VARCHAR(64)    NOT NULL COMMENT '阅读收益所属领域，不限制人物身份',
     `reading_requirement_json`      JSON           NOT NULL COMMENT '固定结构的阅读条件',
     `difficulty`                    INT            NOT NULL COMMENT '阅读难度',
     `required_progress`             INT            NOT NULL COMMENT '完成阅读所需总进度',
@@ -240,9 +234,8 @@ CREATE TABLE IF NOT EXISTS `book_definition`
     `ability_celun_weight`          TINYINT        NOT NULL COMMENT '策论收益权重百分比',
     `ability_wenxue_weight`         TINYINT        NOT NULL COMMENT '文学收益权重百分比',
     `fatigue_cost`                  INT            NOT NULL COMMENT '阅读一回合的基础疲劳值',
-    `knowledge_chushi_summary`      TEXT           NOT NULL COMMENT '初识阶段知识摘要',
-    `knowledge_keyong_summary`      TEXT           NOT NULL COMMENT '可用阶段知识摘要',
-    `knowledge_zhangwo_summary`     TEXT           NOT NULL COMMENT '掌握阶段知识摘要',
+    `total_knowledge`               INT            NOT NULL COMMENT '完整读完本书获得的学识',
+    `knowledge_summary`             TEXT           NOT NULL COMMENT '连续阅读使用的内容介绍',
     PRIMARY KEY (`equipment_id`),
     CONSTRAINT `fk_book_definition_equipment`
         FOREIGN KEY (`equipment_id`) REFERENCES `equipment_definition` (`id`)
@@ -250,7 +243,7 @@ CREATE TABLE IF NOT EXISTS `book_definition`
     CONSTRAINT `chk_book_definition_difficulty`
         CHECK (`difficulty` >= 0),
     CONSTRAINT `chk_book_definition_progress`
-        CHECK (`required_progress` > 0 AND `base_progress_per_turn` > 0),
+        CHECK (`required_progress` = 100 AND `base_progress_per_turn` > 0 AND `total_knowledge` >= 0),
     CONSTRAINT `chk_book_definition_weights`
         CHECK (`ability_shizi_weight` BETWEEN 0 AND 100
             AND `ability_jingyi_weight` BETWEEN 0 AND 100
@@ -273,17 +266,17 @@ CREATE TABLE IF NOT EXISTS `character_equipment`
 (
     `id`                     CHAR(32)    NOT NULL COMMENT '人物装备记录ID',
     `save_id`                CHAR(32)    NOT NULL COMMENT '所属存档ID',
-    `character_id`           CHAR(32)    NOT NULL COMMENT '持有或获准使用装备的人物ID',
+    `character_id`           CHAR(32)    NOT NULL COMMENT '持有装备的人物ID',
     `equipment_id`           CHAR(32)    NOT NULL COMMENT '装备定义ID',
+    `quantity`               INT         NOT NULL DEFAULT 1 COMMENT '本次取得数量，同种装备可多条',
     `ai_text`                TEXT        NULL COMMENT 'AI生成的装备来源文字',
-    `acquired_turn_number`   BIGINT      NOT NULL COMMENT '取得装备或使用权时的总回合编号',
-    `expiration_turn_number` BIGINT      NULL COMMENT '临时使用权到期回合，永久持有时为空',
+    `acquired_turn_number`   BIGINT      NOT NULL COMMENT '本次实际取得装备时的总回合编号',
     `status`                 VARCHAR(32) NOT NULL COMMENT '装备记录当前状态',
     PRIMARY KEY (`id`),
     KEY `idx_character_equipment_save` (`save_id`),
     KEY `idx_character_equipment_character_save` (`character_id`, `save_id`),
     KEY `idx_character_equipment_effective`
-        (`character_id`, `equipment_id`, `status`, `expiration_turn_number`),
+        (`character_id`, `equipment_id`, `status`),
     KEY `idx_character_equipment_definition` (`equipment_id`),
     CONSTRAINT `fk_character_equipment_character_save`
         FOREIGN KEY (`character_id`, `save_id`) REFERENCES `game_character` (`id`, `save_id`)
@@ -293,12 +286,12 @@ CREATE TABLE IF NOT EXISTS `character_equipment`
             ON UPDATE RESTRICT ON DELETE RESTRICT,
     CONSTRAINT `chk_character_equipment_acquired_turn`
         CHECK (`acquired_turn_number` >= 0),
-    CONSTRAINT `chk_character_equipment_expiration_turn`
-        CHECK (`expiration_turn_number` IS NULL OR `expiration_turn_number` >= `acquired_turn_number`)
+    CONSTRAINT `chk_character_equipment_quantity`
+        CHECK (`quantity` > 0)
 ) ENGINE = InnoDB
   DEFAULT CHARACTER SET = utf8mb4
   COLLATE = utf8mb4_unicode_ci
-  COMMENT = '人物装备持有与使用权记录';
+  COMMENT = '人物背包取得记录';
 
 CREATE TABLE IF NOT EXISTS `character_book_progress`
 (
@@ -332,6 +325,8 @@ CREATE TABLE IF NOT EXISTS `character_book_progress`
 
 CREATE TABLE IF NOT EXISTS `event_record`
 (
+    `request_id`               VARCHAR(128) NULL COMMENT '稳定业务请求编号，普通节点为空',
+    `request_payload_json`     JSON         NULL COMMENT '首次请求参数',
     `id`                        CHAR(32)   NOT NULL COMMENT '事件记录ID',
     `save_id`                   CHAR(32)   NOT NULL COMMENT '所属存档ID',
     `event_code`                VARCHAR(64) NOT NULL COMMENT '事件编码',
@@ -342,6 +337,7 @@ CREATE TABLE IF NOT EXISTS `event_record`
     `life_milestone`            TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否为人生节点',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_event_record_id_save` (`id`, `save_id`),
+    UNIQUE KEY `uk_event_record_save_request` (`save_id`, `request_id`),
     KEY `idx_event_record_save_turn` (`save_id`, `occurred_turn_number`),
     KEY `idx_event_record_save_code` (`save_id`, `event_code`),
     CONSTRAINT `fk_event_record_save`
@@ -354,7 +350,7 @@ CREATE TABLE IF NOT EXISTS `event_record`
 ) ENGINE = InnoDB
   DEFAULT CHARACTER SET = utf8mb4
   COLLATE = utf8mb4_unicode_ci
-  COMMENT = '规则确认成立的重大事件';
+  COMMENT = '已成立事件与业务结算回执';
 
 CREATE TABLE IF NOT EXISTS `memory_record`
 (
@@ -394,7 +390,10 @@ CREATE TABLE IF NOT EXISTS `exam_record`
     `pass_threshold`             INT            NOT NULL COMMENT '通过分数线',
     `base_ability_score`         INT            NOT NULL COMMENT '基础能力分B',
     `state_offset`               INT            NOT NULL COMMENT '固定身体状态偏移R',
-    `ai_thought_bubble`          TEXT           NOT NULL COMMENT 'AI生成的思维泡泡',
+    `dice_roll`                  INT            NOT NULL COMMENT '固定1D100骰点',
+    `luck_offset`                INT            NOT NULL COMMENT '固定普通骰点修正',
+    `knowledge_total`            DECIMAL(16,4)  NOT NULL COMMENT '考试开始时的总学识',
+    `ai_thought_bubble`          TEXT           NULL COMMENT 'AI生成的思维泡泡，未调用模型时为空',
     `player_choice`              VARCHAR(32)    NULL COMMENT '系统代行或以身入局',
     `player_input`               TEXT           NULL COMMENT '玩家亲自输入的答案原文',
     `ai_player_content_modifier` INT            NULL COMMENT 'AI评价玩家答案产生的内容修正M',
@@ -418,3 +417,27 @@ CREATE TABLE IF NOT EXISTS `exam_record`
   DEFAULT CHARACTER SET = utf8mb4
   COLLATE = utf8mb4_unicode_ci
   COMMENT = '考试创建与结算记录';
+
+CREATE TABLE IF NOT EXISTS `dialogue_record`
+(
+    `id`                  CHAR(32)     NOT NULL COMMENT '整场对话ID',
+    `save_id`             CHAR(32)     NOT NULL,
+    `actor_id`            CHAR(32)     NOT NULL COMMENT '发起者，玩家或NPC',
+    `counterpart_id`      CHAR(32)     NOT NULL COMMENT '对话对象',
+    `scene_code`          VARCHAR(64)  NOT NULL,
+    `started_turn_number` BIGINT       NOT NULL,
+    `version`             INT          NOT NULL DEFAULT 0 COMMENT '对话往返版本',
+    `ended`               TINYINT(1)   NOT NULL DEFAULT 0,
+    `messages_json`       JSON         NOT NULL COMMENT '对话原文与实际交易结果',
+    PRIMARY KEY (`id`),
+    KEY `idx_dialogue_save_actor` (`save_id`, `actor_id`),
+    KEY `idx_dialogue_counterpart_save` (`counterpart_id`, `save_id`),
+    KEY `idx_dialogue_actor_save` (`actor_id`, `save_id`),
+    CONSTRAINT `fk_dialogue_actor_save`
+        FOREIGN KEY (`actor_id`, `save_id`) REFERENCES `game_character` (`id`, `save_id`)
+            ON UPDATE RESTRICT ON DELETE CASCADE,
+    CONSTRAINT `fk_dialogue_counterpart_save`
+        FOREIGN KEY (`counterpart_id`, `save_id`) REFERENCES `game_character` (`id`, `save_id`)
+            ON UPDATE RESTRICT ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci
+  COMMENT = '人物对话及一次性结束结算状态';

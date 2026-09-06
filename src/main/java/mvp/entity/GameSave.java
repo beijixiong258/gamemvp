@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
+import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
@@ -16,6 +17,7 @@ import lombok.experimental.Accessors;
 public class GameSave {
     @TableId(type = IdType.ASSIGN_UUID)
     private String id; // 存档ID
+    private LocalDateTime createdAt; // 创建时间，用于存档列表排序
     private String status; // 存档当前流程状态
     private Integer birthYear; // 角色出生年份
     private Integer currentYear; // 当前游戏年份

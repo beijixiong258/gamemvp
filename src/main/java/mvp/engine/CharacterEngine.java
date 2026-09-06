@@ -1,5 +1,6 @@
 package mvp.engine;
 
+import mvp.utils.Caculator;
 import org.springframework.stereotype.Component;
 
 import java.io.Serializable;
@@ -14,10 +15,10 @@ public class CharacterEngine {
 
     private static final int ATTRIBUTE_MIN = 0;
     private static final int ATTRIBUTE_MAX = 100;
-    private static final BigDecimal INTELLIGENCE_BASE = Utils.decimal("0.75");
-    private static final BigDecimal INTELLIGENCE_WEIGHT = Utils.decimal("0.50");
-    private static final BigDecimal CONDITION_MIN = Utils.decimal("0.55");
-    private static final BigDecimal CONDITION_MAX = Utils.decimal("1.20");
+    private static final BigDecimal INTELLIGENCE_BASE = Caculator.decimal("0.75");
+    private static final BigDecimal INTELLIGENCE_WEIGHT = Caculator.decimal("0.50");
+    private static final BigDecimal CONDITION_MIN = Caculator.decimal("0.55");
+    private static final BigDecimal CONDITION_MAX = Caculator.decimal("1.20");
 
     /**
      * “开始人生”直接返回六岁时的可玩状态，不创建零至五岁的逐年回合。
@@ -27,11 +28,11 @@ public class CharacterEngine {
      */
     public StartLifeResult startLife(String birthRegionId) {
         int initialAttribute = GameRuleConstant.INITIAL_GENERAL_ATTRIBUTE;
-        int initialHealth = Utils.clamp(
+        int initialHealth = Caculator.clamp(
                 60,
                 100,
-                70 + Utils.roundToInt(
-                        BigDecimal.valueOf(initialAttribute).multiply(Utils.decimal("0.25"))
+                70 + Caculator.roundToInt(
+                        BigDecimal.valueOf(initialAttribute).multiply(Caculator.decimal("0.25"))
                 )
         );
         CharacterState character = new CharacterState(
@@ -69,7 +70,7 @@ public class CharacterEngine {
     public BigDecimal intelligenceFactor(CharacterState character) {
         return INTELLIGENCE_BASE.add(
                 INTELLIGENCE_WEIGHT.multiply(
-                        Utils.divide(BigDecimal.valueOf(character.characterZhili()), 100)
+                        Caculator.divide(BigDecimal.valueOf(character.characterZhili()), 100)
                 )
         );
     }
@@ -81,11 +82,11 @@ public class CharacterEngine {
      * @return 限制在0.55到1.20之间的状态效率系数
      */
     public BigDecimal conditionFactor(CharacterState character) {
-        BigDecimal value = Utils.decimal("0.65")
-                .add(BigDecimal.valueOf(character.characterJiankang()).multiply(Utils.decimal("0.003")))
-                .add(BigDecimal.valueOf(character.characterTineng()).multiply(Utils.decimal("0.002")))
-                .subtract(BigDecimal.valueOf(character.characterPilao()).multiply(Utils.decimal("0.003")));
-        return Utils.clamp(CONDITION_MIN, CONDITION_MAX, value);
+        BigDecimal value = Caculator.decimal("0.65")
+                .add(BigDecimal.valueOf(character.characterJiankang()).multiply(Caculator.decimal("0.003")))
+                .add(BigDecimal.valueOf(character.characterTineng()).multiply(Caculator.decimal("0.002")))
+                .subtract(BigDecimal.valueOf(character.characterPilao()).multiply(Caculator.decimal("0.003")));
+        return Caculator.clamp(CONDITION_MIN, CONDITION_MAX, value);
     }
 
     /**
@@ -99,12 +100,12 @@ public class CharacterEngine {
         if (baseFatigue <= 0) {
             return 0;
         }
-        BigDecimal fitnessCostFactor = Utils.decimal("1.15")
-                .subtract(Utils.divide(BigDecimal.valueOf(character.characterTineng()), 200));
+        BigDecimal fitnessCostFactor = Caculator.decimal("1.15")
+                .subtract(Caculator.divide(BigDecimal.valueOf(character.characterTineng()), 200));
         int missingHealth = Math.max(0, 60 - character.characterJiankang());
-        BigDecimal lowHealthFactor = Utils.ONE
-                .add(Utils.divide(BigDecimal.valueOf(missingHealth), 100));
-        int result = Utils.roundToInt(
+        BigDecimal lowHealthFactor = Caculator.ONE
+                .add(Caculator.divide(BigDecimal.valueOf(missingHealth), 100));
+        int result = Caculator.roundToInt(
                 BigDecimal.valueOf(baseFatigue).multiply(fitnessCostFactor).multiply(lowHealthFactor)
         );
         return Math.max(1, result);
@@ -131,6 +132,7 @@ public class CharacterEngine {
      * @param book 所读书籍的规则快照
      * @param progress 结算前的该书阅读记录
      * @param settlementTurnNumber 本次行动推进后的总回合编号
+     * @param diceRoll 业务层已生成的1D100骰点；1无学习收益，100补满进度
      * @return 读书后的完整状态和实际变化
      */
     public ReadBookResult readBook(
@@ -138,16 +140,17 @@ public class CharacterEngine {
             ScholarState scholar,
             BookRule book,
             BookProgress progress,
-            long settlementTurnNumber
+            long settlementTurnNumber,
+            int diceRoll
     ) {
         BigDecimal readingFoundation = BigDecimal.valueOf(character.characterZhili())
-                .multiply(Utils.decimal("0.40"))
-                .add(BigDecimal.valueOf(scholar.abilityShizi()).multiply(Utils.decimal("0.60")));
-        BigDecimal difficultyFactor = Utils.clamp(
-                Utils.decimal("0.60"),
-                Utils.decimal("1.20"),
-                Utils.ONE.add(
-                        Utils.divide(readingFoundation.subtract(BigDecimal.valueOf(book.difficulty())), 100)
+                .multiply(Caculator.decimal("0.40"))
+                .add(BigDecimal.valueOf(scholar.abilityShizi()).multiply(Caculator.decimal("0.60")));
+        BigDecimal difficultyFactor = Caculator.clamp(
+                Caculator.decimal("0.60"),
+                Caculator.decimal("1.20"),
+                Caculator.ONE.add(
+                        Caculator.divide(readingFoundation.subtract(BigDecimal.valueOf(book.difficulty())), 100)
                 )
         );
         BigDecimal studyAmount = BigDecimal.valueOf(book.baseProgressPerTurn())
@@ -156,28 +159,36 @@ public class CharacterEngine {
                 .multiply(difficultyFactor);
 
         int remainingProgress = Math.max(0, book.requiredProgress() - progress.currentProgress());
-        int progressGain = Math.min(remainingProgress, Math.max(0, Utils.roundToInt(studyAmount)));
-        int progressAfter = Utils.clamp(
+        int progressGain = Math.min(remainingProgress, Math.max(0, Caculator.roundToInt(studyAmount)));
+        if (diceRoll == 1) {
+            progressGain = 0;
+        } else if (diceRoll == 100) {
+            progressGain = remainingProgress;
+        }
+        int progressAfter = Caculator.clamp(
                 0,
                 book.requiredProgress(),
                 progress.currentProgress() + progressGain
         );
 
         BigDecimal weightedAbility = weightedAbility(scholar, book);
-        BigDecimal diminishingFactor = Utils.clamp(
-                Utils.decimal("0.20"),
-                Utils.ONE,
-                Utils.ONE.subtract(
-                        weightedAbility.divide(Utils.decimal("120"), 8, RoundingMode.HALF_UP)
+        BigDecimal diminishingFactor = Caculator.clamp(
+                Caculator.decimal("0.20"),
+                Caculator.ONE,
+                Caculator.ONE.subtract(
+                        weightedAbility.divide(Caculator.decimal("120"), 8, RoundingMode.HALF_UP)
                 )
         );
         BigDecimal reviewFactor = progress.currentProgress() >= book.requiredProgress()
-                ? Utils.decimal("0.35")
-                : Utils.ONE;
-        BigDecimal learningPool = Utils.decimal("0.50")
-                .add(Utils.decimal("0.20").multiply(studyAmount))
+                ? Caculator.decimal("0.35")
+                : Caculator.ONE;
+        BigDecimal learningPool = Caculator.decimal("0.50")
+                .add(Caculator.decimal("0.20").multiply(studyAmount))
                 .multiply(diminishingFactor)
                 .multiply(reviewFactor);
+        if (diceRoll == 1) {
+            learningPool = BigDecimal.ZERO;
+        }
 
         ScholarState roundedGain = new ScholarState(
                 abilityGain(learningPool, book.abilityShiziWeight()),
@@ -204,7 +215,7 @@ public class CharacterEngine {
                 appliedGain,
                 workCondition.fatigueGain(),
                 workCondition.exhaustionDamage(),
-                progress.currentProgress() < 60 && progressAfter >= 60,
+                diceRoll,
                 progress.currentProgress() < book.requiredProgress()
                         && progressAfter >= book.requiredProgress()
         );
@@ -218,20 +229,20 @@ public class CharacterEngine {
      * @return 练习后的能力、疲劳和健康结果
      */
     public PracticeWritingResult practiceWriting(CharacterState character, ScholarState scholar) {
-        BigDecimal writingDiminishing = Utils.clamp(
-                Utils.decimal("0.25"),
-                Utils.ONE,
-                Utils.ONE.subtract(
+        BigDecimal writingDiminishing = Caculator.clamp(
+                Caculator.decimal("0.25"),
+                Caculator.ONE,
+                Caculator.ONE.subtract(
                         BigDecimal.valueOf(scholar.abilityWenzhang())
-                                .divide(Utils.decimal("120"), 8, RoundingMode.HALF_UP)
+                                .divide(Caculator.decimal("120"), 8, RoundingMode.HALF_UP)
                 )
         );
-        BigDecimal rawGain = Utils.decimal("2.40")
+        BigDecimal rawGain = Caculator.decimal("2.40")
                 .multiply(intelligenceFactor(character))
                 .multiply(conditionFactor(character))
                 .multiply(writingDiminishing);
-        int roundedGain = Math.max(0, Utils.roundToInt(rawGain));
-        int abilityAfter = Utils.clamp(
+        int roundedGain = Math.max(0, Caculator.roundToInt(rawGain));
+        int abilityAfter = Caculator.clamp(
                 ATTRIBUTE_MIN,
                 ATTRIBUTE_MAX,
                 scholar.abilityWenzhang() + roundedGain
@@ -260,8 +271,8 @@ public class CharacterEngine {
      * @return 休息后的人物状态和实际恢复量
      */
     public RestResult rest(CharacterState character) {
-        int plannedFatigueRecovery = 18 + Utils.roundToInt(
-                BigDecimal.valueOf(character.characterTineng()).multiply(Utils.decimal("0.10"))
+        int plannedFatigueRecovery = 18 + Caculator.roundToInt(
+                BigDecimal.valueOf(character.characterTineng()).multiply(Caculator.decimal("0.10"))
         );
         int fatigueAfter = Math.max(0, character.characterPilao() - plannedFatigueRecovery);
         int plannedHealthRecovery = 3
@@ -297,6 +308,7 @@ public class CharacterEngine {
             ScholarState scholar,
             DriverPatch patch
     ) {
+        patch = limitDriver(patch);
         CharacterState characterAfter = new CharacterState(
                 applyBoundedChange(character.characterZhili(), patch.attributeIntelligenceGain()),
                 applyBoundedChange(character.characterDaode(), patch.attributeMoralityGain()),
@@ -314,14 +326,14 @@ public class CharacterEngine {
                 applyBoundedChange(scholar.abilityWenxue(), patch.abilityWenxueGain())
         );
 
-        int fatigueOffset = Utils.roundToInt(patch.fatigueOffset());
-        int fatigueAfter = Utils.clamp(0, 100, character.characterPilao() + fatigueOffset);
+        int fatigueOffset = Caculator.roundToInt(patch.fatigueOffset());
+        int fatigueAfter = Caculator.clamp(0, 100, character.characterPilao() + fatigueOffset);
         int exhaustionDamage = fatigueOffset > 0 ? exhaustionDamage(fatigueAfter) : 0;
-        int healthAfter = Utils.clamp(
+        int healthAfter = Caculator.clamp(
                 0,
                 100,
                 character.characterJiankang()
-                        + Utils.roundToInt(patch.healthOffset())
+                        + Caculator.roundToInt(patch.healthOffset())
                         - exhaustionDamage
         );
         characterAfter = new CharacterState(
@@ -345,11 +357,11 @@ public class CharacterEngine {
      * @return 加权后的能力值
      */
     private BigDecimal weightedAbility(ScholarState scholar, BookRule book) {
-        return BigDecimal.valueOf(scholar.abilityShizi()).multiply(Utils.ratio(book.abilityShiziWeight()))
-                .add(BigDecimal.valueOf(scholar.abilityJingyi()).multiply(Utils.ratio(book.abilityJingyiWeight())))
-                .add(BigDecimal.valueOf(scholar.abilityWenzhang()).multiply(Utils.ratio(book.abilityWenzhangWeight())))
-                .add(BigDecimal.valueOf(scholar.abilityCelun()).multiply(Utils.ratio(book.abilityCelunWeight())))
-                .add(BigDecimal.valueOf(scholar.abilityWenxue()).multiply(Utils.ratio(book.abilityWenxueWeight())));
+        return BigDecimal.valueOf(scholar.abilityShizi()).multiply(Caculator.ratio(book.abilityShiziWeight()))
+                .add(BigDecimal.valueOf(scholar.abilityJingyi()).multiply(Caculator.ratio(book.abilityJingyiWeight())))
+                .add(BigDecimal.valueOf(scholar.abilityWenzhang()).multiply(Caculator.ratio(book.abilityWenzhangWeight())))
+                .add(BigDecimal.valueOf(scholar.abilityCelun()).multiply(Caculator.ratio(book.abilityCelunWeight())))
+                .add(BigDecimal.valueOf(scholar.abilityWenxue()).multiply(Caculator.ratio(book.abilityWenxueWeight())));
     }
 
     /**
@@ -360,7 +372,7 @@ public class CharacterEngine {
      * @return 四舍五入后的非负能力增长
      */
     private int abilityGain(BigDecimal learningPool, int weightPercentage) {
-        return Math.max(0, Utils.roundToInt(learningPool.multiply(Utils.ratio(weightPercentage))));
+        return Math.max(0, Caculator.roundToInt(learningPool.multiply(Caculator.ratio(weightPercentage))));
     }
 
     /**
@@ -372,11 +384,11 @@ public class CharacterEngine {
      */
     private ScholarState applyAbilityGain(ScholarState current, ScholarState gain) {
         return new ScholarState(
-                Utils.clamp(ATTRIBUTE_MIN, ATTRIBUTE_MAX, current.abilityShizi() + gain.abilityShizi()),
-                Utils.clamp(ATTRIBUTE_MIN, ATTRIBUTE_MAX, current.abilityJingyi() + gain.abilityJingyi()),
-                Utils.clamp(ATTRIBUTE_MIN, ATTRIBUTE_MAX, current.abilityWenzhang() + gain.abilityWenzhang()),
-                Utils.clamp(ATTRIBUTE_MIN, ATTRIBUTE_MAX, current.abilityCelun() + gain.abilityCelun()),
-                Utils.clamp(ATTRIBUTE_MIN, ATTRIBUTE_MAX, current.abilityWenxue() + gain.abilityWenxue())
+                Caculator.clamp(ATTRIBUTE_MIN, ATTRIBUTE_MAX, current.abilityShizi() + gain.abilityShizi()),
+                Caculator.clamp(ATTRIBUTE_MIN, ATTRIBUTE_MAX, current.abilityJingyi() + gain.abilityJingyi()),
+                Caculator.clamp(ATTRIBUTE_MIN, ATTRIBUTE_MAX, current.abilityWenzhang() + gain.abilityWenzhang()),
+                Caculator.clamp(ATTRIBUTE_MIN, ATTRIBUTE_MAX, current.abilityCelun() + gain.abilityCelun()),
+                Caculator.clamp(ATTRIBUTE_MIN, ATTRIBUTE_MAX, current.abilityWenxue() + gain.abilityWenxue())
         );
     }
 
@@ -406,9 +418,9 @@ public class CharacterEngine {
      */
     private WorkCondition settleWorkCondition(CharacterState character, int baseFatigue) {
         int fatigueGain = fatigueGain(baseFatigue, character);
-        int fatigueAfter = Utils.clamp(0, 100, character.characterPilao() + fatigueGain);
+        int fatigueAfter = Caculator.clamp(0, 100, character.characterPilao() + fatigueGain);
         int exhaustionDamage = exhaustionDamage(fatigueAfter);
-        int healthAfter = Utils.clamp(0, 100, character.characterJiankang() - exhaustionDamage);
+        int healthAfter = Caculator.clamp(0, 100, character.characterJiankang() - exhaustionDamage);
         CharacterState characterAfter = new CharacterState(
                 character.characterZhili(),
                 character.characterDaode(),
@@ -429,7 +441,7 @@ public class CharacterEngine {
      * @return 四舍五入并收束后的整数值
      */
     private int applyBoundedChange(int current, BigDecimal change) {
-        return Utils.clamp(ATTRIBUTE_MIN, ATTRIBUTE_MAX, current + Utils.roundToInt(change));
+        return Caculator.clamp(ATTRIBUTE_MIN, ATTRIBUTE_MAX, current + Caculator.roundToInt(change));
     }
 
     /**
@@ -461,9 +473,73 @@ public class CharacterEngine {
         int fatigueChange = Math.abs(characterAfter.characterPilao() - characterBefore.characterPilao());
         return BigDecimal.valueOf(attributeChange * 4L)
                 .add(BigDecimal.valueOf(abilityChange * 4L))
-                .add(BigDecimal.valueOf(healthChange).multiply(Utils.decimal("0.50")))
-                .add(BigDecimal.valueOf(fatigueChange).multiply(Utils.decimal("0.25")))
+                .add(BigDecimal.valueOf(healthChange).multiply(Caculator.decimal("0.50")))
+                .add(BigDecimal.valueOf(fatigueChange).multiply(Caculator.decimal("0.25")))
                 .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * 计算单书已经取得的学识，未读满时按六成比例折算，读满取得全部。
+     *
+     * @param totalKnowledge 该书完整学识
+     * @param progress 0至100的整数进度
+     * @return 学识贡献，最多四位小数，不在每次阅读时反复取整
+     */
+    public BigDecimal knowledgeContribution(int totalKnowledge, int progress) {
+        return progress >= 100 ? BigDecimal.valueOf(totalKnowledge)
+                : BigDecimal.valueOf(totalKnowledge).multiply(Caculator.decimal("0.006"))
+                        .multiply(BigDecimal.valueOf(Math.max(0, progress)));
+    }
+
+    /**
+     * 重病入场只扣一次五维，健康保持0，回合数由业务层保存。
+     *
+     * @param current 重病开始前的人物状态
+     * @return 五维各减2后的状态
+     */
+    public CharacterState enterIllness(CharacterState current) {
+        int loss = GameRuleConstant.SICK_ATTRIBUTE_LOSS;
+        return new CharacterState(Math.max(0, current.characterZhili() - loss),
+                Math.max(0, current.characterDaode() - loss), Math.max(0, current.characterZhengzhi() - loss),
+                Math.max(0, current.characterJiaoji() - loss), Math.max(0, current.characterTineng() - loss),
+                0, current.characterPilao());
+    }
+
+    /**
+     * 结算一回合重病休养；最后一回合恢复到40健康。
+     *
+     * @param current 当前人物状态
+     * @param lastTurn 是否为最后一回合休养
+     * @return 疲劳恢复后的人物状态
+     */
+    public CharacterState recoverIllnessTurn(CharacterState current, boolean lastTurn) {
+        return new CharacterState(current.characterZhili(), current.characterDaode(), current.characterZhengzhi(),
+                current.characterJiaoji(), current.characterTineng(),
+                lastTurn ? GameRuleConstant.SICK_RECOVERY_HEALTH : 0, Math.max(0, current.characterPilao() - 20));
+    }
+
+    /**
+     * 收束一场AI行为的驱动量；缺省字段按0，属性/能力采用首版变化上限。
+     *
+     * @param patch AI给出的变化量
+     * @return 可交给引擎的有界驱动量
+     */
+    public DriverPatch limitDriver(DriverPatch patch) {
+        if (patch == null) {
+            throw new IllegalArgumentException("AI未返回属性结算");
+        }
+        int attributeLimit = GameRuleConstant.AI_ATTRIBUTE_CHANGE_LIMIT;
+        int abilityLimit = GameRuleConstant.AI_ABILITY_CHANGE_LIMIT;
+        return new DriverPatch(bounded(patch.attributeIntelligenceGain(), attributeLimit), bounded(patch.attributeMoralityGain(), attributeLimit),
+                bounded(patch.attributePoliticsGain(), attributeLimit), bounded(patch.attributeSocialGain(), attributeLimit),
+                bounded(patch.attributeFitnessGain(), attributeLimit), bounded(patch.abilityShiziGain(), abilityLimit),
+                bounded(patch.abilityJingyiGain(), abilityLimit), bounded(patch.abilityWenzhangGain(), abilityLimit),
+                bounded(patch.abilityCelunGain(), abilityLimit), bounded(patch.abilityWenxueGain(), abilityLimit),
+                bounded(patch.fatigueOffset(), 20), bounded(patch.healthOffset(), 10));
+    }
+
+    private BigDecimal bounded(BigDecimal value, int limit) {
+        return value == null ? BigDecimal.ZERO : Caculator.clamp(BigDecimal.valueOf(-limit), BigDecimal.valueOf(limit), value);
     }
 
     private record WorkCondition(
@@ -532,7 +608,7 @@ public class CharacterEngine {
             ScholarState abilityGain,
             int fatigueGain,
             int exhaustionDamage,
-            boolean reachedUsable,
+            int diceRoll,
             boolean reachedMastered
     ) {
     }

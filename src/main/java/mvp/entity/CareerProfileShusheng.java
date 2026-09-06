@@ -14,8 +14,11 @@ import lombok.experimental.Accessors;
 @Accessors(chain = true)
 @TableName("career_profile_shusheng")
 public class CareerProfileShusheng {
-    @TableId(type = IdType.INPUT)
-    private String careerProfileId; // 父职业档案ID，同时也是本表主键
+    @TableId(type = IdType.ASSIGN_UUID)
+    private String id; // 书生领域档案ID
+    private String characterId; // 所属人物ID，同一人物可以同时拥有不同领域档案
+    private Long unlockTurnNumber; // 首次建立书生领域档案时的总回合编号
+    private Long lastActiveTurnNumber; // 最后参与书生领域行动时的总回合编号
     private Integer abilityShizi; // 识字能力
     private Integer abilityJingyi; // 经义能力
     private Integer abilityWenzhang; // 文章能力

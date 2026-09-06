@@ -4,7 +4,7 @@
       "npcCode": "NPC_FUQIN",
       "displayName": "父亲",
       "roleCode": "ROLE_FUQIN",
-      "nameMode": "GENERATED",
+      "nameMode": "FIXED",
       "defaultSceneCode": "SCENE_JIA",
       "personalitySummary": "关心家庭生计和孩子前途，表达方式较为克制。",
       "enabled": true
@@ -13,7 +13,7 @@
       "npcCode": "NPC_MUQIN",
       "displayName": "母亲",
       "roleCode": "ROLE_MUQIN",
-      "nameMode": "GENERATED",
+      "nameMode": "FIXED",
       "defaultSceneCode": "SCENE_JIA",
       "personalitySummary": "重视孩子的身体与日常生活，会留意疲劳和健康。",
       "enabled": true
@@ -22,7 +22,7 @@
       "npcCode": "NPC_XIANSHENG",
       "displayName": "私塾先生",
       "roleCode": "ROLE_XIANSHENG",
-      "nameMode": "GENERATED",
+      "nameMode": "FIXED",
       "defaultSceneCode": "SCENE_SISHU",
       "personalitySummary": "治学严谨，重视基础、礼法和循序渐进。",
       "enabled": true
@@ -31,7 +31,7 @@
       "npcCode": "NPC_JIAHAO",
       "displayName": "隔壁班嘉豪",
       "roleCode": "ROLE_TONGCHUANG",
-      "nameMode": "GENERATED",
+      "nameMode": "FIXED",
       "defaultSceneCode": "SCENE_SISHU",
       "personalitySummary": "与玩家年龄相近，会根据共同经历形成自然态度。",
       "enabled": true
@@ -40,9 +40,18 @@
       "npcCode": "NPC_XIANSHI_KAOGUAN",
       "displayName": "县试考官",
       "roleCode": "ROLE_KAOGUAN",
-      "nameMode": "GENERATED",
+      "nameMode": "FIXED",
       "defaultSceneCode": "SCENE_XIANSHI",
       "personalitySummary": "只依据考试规则和答卷表现作出正式评价。",
+      "enabled": true
+    },
+    {
+      "npcCode": "NPC_SHANGREN",
+      "displayName": "书商陆掌柜",
+      "roleCode": "ROLE_SHANGREN",
+      "nameMode": "FIXED",
+      "defaultSceneCode": "SCENE_JISHI",
+      "personalitySummary": "做买卖讲究现钱现货，偶尔从不知名的穿越者手中收到离奇书籍。",
       "enabled": true
     }
   ]

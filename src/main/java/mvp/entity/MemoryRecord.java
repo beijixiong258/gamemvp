@@ -19,7 +19,7 @@ public class MemoryRecord {
     private String saveId; // 记忆所属的游戏存档ID
     private String ownerCharacterId; // 拥有这段记忆的人物ID
     private String sourceEventId; // 产生这段记忆的事件记录ID
-    private String AIMemorySummary; // 由AI生成并提供给游戏逻辑或后续AI调用的记忆摘要
+    private String aiMemorySummary; // 由AI生成并提供给游戏逻辑或后续AI调用的记忆摘要
     private String relatedCharacterIdJson;
     private Long occurredTurnNumber; // 记忆对应事件发生时的总回合编号
 }

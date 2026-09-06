@@ -21,5 +21,6 @@ public class Equipment {
     private String equipmentType; // 装备类型编码，例如书籍
     private String rarityCode; // 装备稀有度编码
     private Integer price; // 装备价格，单位为文
+    private String supplierNpcCode; // 当前提供获取行为的NPC模板编码
     private String description; // 装备基础介绍
 }

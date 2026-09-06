@@ -17,6 +17,8 @@ public class EventRecord {
     @TableId(type = IdType.ASSIGN_UUID)
     private String id; // 事件记录ID
     private String saveId; // 事件所属的游戏存档ID
+    private String requestId; // 一次业务请求的稳定编号；普通人生节点可为空
+    private String requestPayloadJson; // 原始业务参数，防止同一请求编号被用于其他操作
     private String eventCode; // 事件编码
     private String eventSummary; // 人生节点或世界事件的自然语言摘要
     private String relatedCharacterIdJson; // 与事件有关的人物ID组成的JSON数组

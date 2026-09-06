@@ -12,7 +12,10 @@ spring:
     password: "030206"
 
   ai:
+    retry:
+      max-attempts: 1
     openai:
+      max-retries: 0
       api-key: ${MIMO_API_KEY}
       base-url: https://api.xiaomimimo.com/v1
       chat:

@@ -1,15 +1,19 @@
 package mvp.ai;
 
-import mvp.engine.CharacterEngine;
 import mvp.engine.CharacterEngine.CharacterState;
 import mvp.engine.CharacterEngine.DriverResult;
 import mvp.engine.CharacterEngine.ScholarState;
+import mvp.engine.CharacterEngine;
+import mvp.service.EquipmentRecordService.AcquisitionIntent;
 import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.bsc.langgraph4j.StateGraph.END;
@@ -49,13 +53,20 @@ public class FreeActionWorkflow {
         input.put(FreeActionState.CHARACTER, command.character());
         input.put(FreeActionState.SCHOLAR, command.scholar());
 
-        FreeActionState finalState = graph.invoke(input)
-                .orElseThrow(() -> new IllegalStateException("自由行动流程没有返回最终状态"));
+        FreeActionState finalState;
+        try {
+            finalState = graph.invoke(input)
+                    .orElseThrow(() -> new IllegalStateException("自由行动流程没有返回最终状态"));
+        } catch (RuntimeException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "AI调用失败，请检查网络或模型账户余额后重试", exception);
+        }
         FreeActionResolver.FreeActionResolution resolution = finalState.resolution();
         return new FreeActionResult(
                 finalState.settlement(),
                 resolution.eventSummary(),
-                resolution.lifeMilestone()
+                resolution.lifeMilestone(),
+                resolution.acquisitions() == null ? List.of() : resolution.acquisitions()
         );
     }
 
@@ -122,7 +133,8 @@ public class FreeActionWorkflow {
     public record FreeActionResult(
             DriverResult settlement,
             String eventSummary,
-            boolean lifeMilestone
+            boolean lifeMilestone,
+            List<AcquisitionIntent> acquisitions
     ) {
     }
 }

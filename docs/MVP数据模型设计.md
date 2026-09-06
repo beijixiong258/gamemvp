@@ -1,254 +1,186 @@
 # 古代穿越人生模拟游戏 MVP 数据模型设计
 
-> 本文只说明持久化对象、关系、关键字段与生命周期。玩法见[《MVP设计文档》](./MVP设计文档.md)，计算和 Resolver 编排见[《MVP引擎设计》](./MVP引擎设计.md)，实际建表以 `src/main/resources/db/schema.sql` 为准。
+> 本文只维护持久化关系、字段与生命周期。玩法见[产品设计](./MVP设计文档.md)，公式和事务边界见[引擎设计](./MVP引擎设计.md)，当前建表定义见 [schema.sql](../src/main/resources/db/schema.sql)。
 
 ## 一、建模原则
 
-- 静态定义与存档状态分开：地区、装备和书籍是定义；人物、成长和事件属于存档。
-- 一个业务实体使用一张主表；职业和书籍只在确有专属字段时使用扩展表。
-- 游戏内顺序统一使用 `total_turn_number`，领域表暂不增加现实时间戳。
-- AI 生成字段使用 `ai_` 前缀，避免与确定事实混淆。
-- 金额、阅读进度和考试分数都保存为整数。
-- 地区只使用一张邻接表，不为省、市、县分别建表。
+静态定义与存档事实分离；玩家和NPC共用人物、钱包、背包、领域、对话与考试数据。不设置互斥的主职业，每个领域独立保存完整档案。
 
-持久化代码按 MyBatis-Plus 技术层组织：实体统一位于 `mvp.entity`，Mapper 位于 `mvp.mapper`，Service 接口位于 `mvp.service`，实现位于 `mvp.service.impl`，HTTP 入口位于 `mvp.controller`。同一实体保留 `IService` 与 `ServiceImpl`，业务方法放入对应 Service，避免再为单个业务对象建立纵向小包。
+持久化代码沿用 MyBatis-Plus：`mvp.entity`、`mapper`、`service`、`service.impl`、`controller`，保留 `IService` 和 `ServiceImpl`。同一实体的业务归入对应 Service，不再拆出单类包。
+
+游戏顺序使用 `total_turn_number`；现实创建时间只在存档上保存。金额、阅读进度、考试分数为整数，学识允许小数。数据库 AI 字段使用 `ai_` 前缀，Java 使用 `aiText` 等小驼峰命名。
 
 ## 二、总体关系
 
+当前新库共13张表：
+
 ```text
-region_definition
-  └─< region_definition
-       （parent_id自关联）
-
+region_definition ← parent_id 自关联
+  ↑ 出生地、所在地
 game_save
-  ├─< game_character >─ region_definition
-  │    ├─< character_career
-  │    │    └─ career_profile_shusheng
-  │    ├─< character_equipment >─ equipment_definition
-  │    ├─< character_book_progress >─ book_definition
-  │    ├─< memory_record
-  │    └─< exam_record
-  ├── family_background
-  └─< event_record
-       └─< memory_record
+  ├─ family_background
+  ├─ game_character（玩家与NPC）
+  │   ├─ career_profile_shusheng
+  │   ├─ character_equipment → equipment_definition
+  │   ├─ character_book_progress → book_definition
+  │   ├─ exam_record
+  │   └─ memory_record → event_record
+  ├─ event_record（人生节点与请求回执）
+  └─ dialogue_record（双方均引用本存档人物）
 
-equipment_definition
-  └── book_definition
+equipment_definition ← book_definition 一对一扩展
 ```
 
-`game_save` 是运行数据根节点。`region_definition` 与装备定义不属于某个存档，可被多个存档引用。
+装备和地区定义跨存档共用。人物、领域档案、背包、阅读、事件、记忆、考试和对话属于某一存档。
 
-## 三、行政区树
-
-### `region_definition`
-
-所有行政区节点放在同一张表：
+## 三、行政区树：region_definition
 
 | 字段 | 含义 |
 |---|---|
-| `id` | 地区主键 |
-| `parent_id` | 直接上级地区 ID；根节点为 `NULL` |
-| `region_code` | 稳定业务编码 |
-| `region_name` | 显示名称 |
-| `region_level` | `PROVINCE`、`CITY` 或 `COUNTY` |
-| `enabled` | 是否启用 |
-| `sort_order` | 同一父节点下的显示顺序 |
+| `id` | 地区ID |
+| `parent_id` | 唯一的直接上级ID，根节点为空 |
+| `region_code`、`region_name` | 稳定编码、显示名称 |
+| `region_level` | PROVINCE、CITY、COUNTY |
+| `enabled`、`sort_order` | 启用状态、同级顺序 |
 
-`parent_id` 外键回指本表 `id`，这就是唯一的层级关系；`region_level` 只描述节点等级，不产生分层表。
+所有级别放在一张表，子节点不重复保存祖先。当前广东省下有广州、惠州；广州下有番禺、南海、顺德，惠州下有博罗、海丰。出生页只查询惠州下启用的 COUNTY 直接子节点。后续政治线沿父节点链确定管辖关系。
 
-当前树为：
+## 四、存档、人物与初始家庭背景
 
-```text
-广东省（PROVINCE）
-├─ 广州（CITY）
-│  ├─ 番禺县（COUNTY）
-│  ├─ 南海县（COUNTY）
-│  └─ 顺德县（COUNTY）
-└─ 惠州（CITY）
-   ├─ 博罗县（COUNTY）
-   └─ 海丰县（COUNTY）
-```
+### game_save
 
-MVP 的可选出生地不写入地区表。业务层读取惠州节点下启用的 `COUNTY` 子节点，结果即博罗县和海丰县。后续政治线可以沿 `parent_id` 向上确定管辖链，或向下取得作用范围。
+| 字段 | 含义 |
+|---|---|
+| `id`、`created_at` | 存档ID和现实创建时间 |
+| `status`、`growth_stage` | 当前流程状态与成长阶段 |
+| `birth_year`、`age` | 主角出生年和当前年龄 |
+| `current_year`、`current_month`、`turn_in_month` | 当前世界日历 |
+| `total_turn_number` | 已经过的普通及强制休养回合数 |
 
-## 四、存档、人物与家庭
+存档只有一条共享时间线。NPC通过通用行动接口消耗回合时，也推进该时间线；尚无独立的后台NPC调度或个人考试日历。
 
-### 1. `game_save`
+### game_character
 
-保存一局的时间与流程：
+| 字段组 | 含义 |
+|---|---|
+| `id`、`save_id`、`name` | 人物身份及所属存档 |
+| `type` | 控制类型，1为玩家、0为NPC，不决定可执行动作 |
+| `npc_code` | 本局固定NPC对应的资源编码；玩家为空 |
+| `birth_region_id`、`current_region_id` | 出生地与当前所在地 |
+| `character_zhili/daode/zhengzhi/jiaoji/tineng` | 五项通用属性 |
+| `character_jiankang`、`character_pilao` | 当前健康、疲劳 |
+| `wallet` | 当前可支配资金，整数文数 |
+| `sick_turns_remaining` | 尚未完成的强制休养回合 |
+| `official_position`、`official_rank`、`degree` | 存档列表需要的官职、级别、学位/功名展示字段 |
+| `titles_json` | 可同时保有的称号数组，初始为 [] |
+| `birthday`、`personality_summary`、`current_state` | 生日、稳定性格及当前状态摘要 |
+| `available_stage_code_json`、`enabled` | 可参与阶段与启用状态 |
 
-- `status`：`STUDYING`、`STAGE_EXAM_READY`、`EXAM_READY`、`COMPLETED` 等。
-- `birth_year`：默认 1541。
-- `current_year`：默认开局 1547。
-- `current_month`：1～12。
-- `turn_in_month`：正常游戏阶段为 1～4。
-- `age`：开局为 6。
-- `total_turn_number`：已完成的结束回合行动数，开局为 0。
-- `growth_stage`：求学、阶段考试、县试或完成。
+`(save_id, npc_code)` 唯一，保证同一NPC原型在一局中只生成一次。所有人物都可有自己的钱包、背包和书生档案。初始资金当前固定2000文，与家庭财富没有实时关联。
 
-一局只有一个当前时间，不另外创建日历流水表。
+身份字段只是展示占位，不自动授予官职、学位或权限，也不代表完整组织任职模型。多组织任职与历史仍需后续独立建模。
 
-### 2. `game_character`
+### family_background
 
-玩家与固定 NPC 共用人物表。关键字段包括：
+每局一条，`save_id` 唯一。`initial_wealth` 保存初始家庭财富，范围10000～1000000文，当前固定100000；`background_summary` 保存出生背景。交易不修改这张表。
 
-- `save_id`、`name`、`type`。
-- `birth_region_id`：出生地区，创建后不变。
-- `current_region_id`：当前所在地区，后续允许移动。
-- 五项通用属性：智力、道德、政治、交际、体能。
-- 当前健康、疲劳、主职业、生日和启用状态。
-- `personality_summary`、`current_state` 与可参与阶段编码。
+## 五、领域档案：career_profile_shusheng
 
-两个地区字段都引用 `region_definition.id`。五项通用属性开局固定为 20；人物表不保存书生能力、装备集合或阅读进度。
+一位人物一份书生领域档案，`character_id` 唯一并直接引用人物，不再依赖通用 CareerProfile 表。
 
-### 3. `family_background`
+| 字段 | 含义 |
+|---|---|
+| `id`、`character_id` | 档案ID与所属人物 |
+| `unlock_turn_number` | 首次建立档案的回合 |
+| `last_active_turn_number` | 最近参与该领域结算的回合，可为空 |
+| `ability_shizi/jingyi/wenzhang/celun/wenxue` | 识字、经义、文章、策论、文学能力 |
 
-每个存档只有一条开局家庭背景，对应实体 `FamilyBackground`：
-
-- `initial_wealth`：开局家庭财富，整数文数，范围 10000～1000000，当前固定为 100000。
-- `background_summary`：开局时固定的家庭背景摘要。
-
-家庭背景属于存档，不绑定单个人物，也不承担游戏进行中的可变财富状态。后续若加入个人财产或家庭账目，应单独建运行状态模型。
-
-## 五、职业
-
-### 1. `character_career`
-
-一条记录代表一个人物的一段职业身份，对应 `mvp.entity.CareerProfile`：
-
-- `character_id`、`career_code`。
-- `unlock_turn_number`、`last_active_turn_number`。
-- `status`。
-
-同一人物与同一职业编码唯一。MVP 开局直接建立 `CAREER_SHUSHENG` 档案，不为 0～5 岁建立逐年职业状态。
-
-### 2. `career_profile_shusheng`
-
-对应 `mvp.entity.CareerProfileShusheng`，以 `career_profile_id` 同时作为主键和外键，保存书生专属能力：
-
-- 识字。
-- 经义。
-- 文章。
-- 策论。
-- 文学。
-
-五项均为 0～100 的整数。初始识字为 5，其余为 0。
+开局识字5，其余0，五项能力限制0～100。读书、练习、考试及AI属性结算更新最后活跃回合，休息不更新。后续领域使用自己的完整档案表，与书生档案并存，不区分主次或切换职业。
 
 ## 六、装备、书籍与阅读
 
-### 1. `equipment_definition`
+### equipment_definition / book_definition
 
-通用装备定义保存编码、名称、类型、稀有度、价格和基础介绍。价格使用整数文数。
+通用装备保存 `equipment_code`、名称、类型、稀有度、整数价格、`supplier_npc_code` 和介绍。供应编码对应NPC原型，由业务层映射到当前存档中的实际人物，不跨存档引用NPC主键。
 
-### 2. `book_definition`
+书籍以 `equipment_id` 一对一扩展装备，保存领域编码、阅读条件JSON、难度、基础进度、五项能力权重、疲劳、`total_knowledge` 和单一 `knowledge_summary`。`required_progress` 固定100。
 
-书籍以 `equipment_id` 一对一扩展通用装备，保存：
+`total_knowledge` 是整本读满后的学识量；`knowledge_summary` 是内容介绍，不再保存25/60/100三档摘要。计算公式只在引擎文档维护。
 
-- 适用职业和阅读条件。
-- 难度。
-- 完成所需进度和单回合基础进度，均为整数。
-- 五项能力权重百分比。
-- 基础疲劳。
-- 初识、可用、掌握三个知识摘要。
+新开局或显式补齐内容时，按编码插入缺失定义，不覆盖已有数据库定义。JSON修改不等于数据库自动更新。当前“先查再插”仍可能在公共定义首次并发初始化时发生唯一键竞争，暂不增加复杂重试。
 
-书籍定义不保存任何人物状态。
+### character_equipment
 
-### 3. `character_equipment`
+| 字段 | 含义 |
+|---|---|
+| `save_id`、`character_id`、`equipment_id` | 存档、持有人、装备定义 |
+| `quantity` | 本次获取数量，正整数 |
+| `acquired_turn_number` | 本次实际入包回合 |
+| `status` | 当前使用 OWNED 表示持有 |
+| `ai_text` | 可选来源叙事，Java为 aiText |
 
-保存人物对装备的持有权或使用权：
+一次成功获取产生一条记录；同种装备允许多条记录和多件数量，背包按装备定义汇总。没有“人物＋装备”唯一限制。新结构不使用借阅或到期字段。
 
-- 所属存档、人物和装备。
-- 取得回合、可选的到期回合、状态。
-- 可选的 AI 来源叙事。
+免费教材同样必须执行获取行为才建立记录；购买在同一事务完成扣款、提供者收款、入包和请求回执。不自动向新存档或旧存档发放物品。
 
-临时借阅通过到期回合表达，不复制书籍定义。
+### character_book_progress
 
-### 4. `character_book_progress`
+`(character_id, equipment_id)` 唯一，保存 `current_progress`、`total_read_turn_number`、`completed` 和 `last_read_turn_number`。无记录按零进度展示，首次实际读书才创建。
 
-每个人物、每本书最多一条累计记录：
+持有数量与阅读进度相互独立：同一种书多本不重复加学识，失去物品不删除已学进度。总学识从所有阅读记录计算，不在人物表再存一份可变汇总。
 
-- `current_progress`：0～100 的整数。
-- `total_read_turn_number`：累计阅读回合数。
-- `completed`：是否完成。
-- `last_read_turn_number`：最后阅读回合，可为 `NULL`。
+## 七、事件回执、对话与记忆
 
-阅读进度与持有记录分离。归还后进度仍保留，再次获得使用权可继续阅读。
+### event_record
 
-## 七、事件与记忆
+同表区分两种记录：
 
-### 1. `event_record`
+| 类型 | 特征与用途 |
+|---|---|
+| 人生节点 | `life_milestone=true`，用于展示首次读满、考试和重要自由行动；`request_id` 可为空 |
+| 操作回执 | `life_milestone=false`，保存固定行动、获取、自由行动、对话的原请求与已执行结果 |
 
-只保存已经发生且值得长期保留的事实：
+`(save_id, request_id)` 唯一。`request_payload_json` 保存首次参数，`settlement_result_json` 保存实际响应；同一编号、相同参数重传返回原结果，更换参数则拒绝。固定读书的骰点也在回执中保存。客户端不能把“重新操作”和“网络重传”使用同一个编号。
 
-- 事件编码、事实摘要和相关人物 ID。
-- 发生回合。
-- 已执行的结算结果。
-- 是否为人生节点。
+`event_code`、`event_summary`、`related_character_id_json`、`occurred_turn_number` 描述已发生事实。人生节点列表只读取标记为真的记录，不展示普通回执。
 
-普通操作不需要逐条写成事件。
+### dialogue_record
 
-### 2. `memory_record`
+| 字段 | 含义 |
+|---|---|
+| `id`、`save_id` | 整场对话与所属存档 |
+| `actor_id`、`counterpart_id` | 本存档内的发起者和对话对象 |
+| `scene_code`、`started_turn_number` | 场景与开始回合 |
+| `version` | 每次成功往返递增的版本 |
+| `ended` | 是否已经结束并完成整场属性结算 |
+| `messages_json` | 对话原文、手动结束标记及已执行交易 |
 
-同一事件可以为不同人物形成不同记忆：
+普通往返可完成本轮明确的交易，但不结算属性；手动或模型结束时只结算一次属性。结束标志、历史、交易、属性和回执在同一短事务提交。模型请求在事务外执行。
 
-- 记忆拥有者。
-- 来源事件。
-- AI 生成的记忆摘要。
-- 相关人物与发生回合。
+### memory_record
 
-`owner_character_id + source_event_id` 唯一，避免同一人物重复记住同一事件。
+保留长期记忆结构：`owner_character_id`、`source_event_id`、`ai_memory_summary`、相关人物和回合。`(owner_character_id, source_event_id)` 唯一。当前对话使用本场历史，不自动生成长期记忆或执行RAG检索。
 
-## 八、考试
+## 八、考试：exam_record
 
-### `exam_record`
+`(character_id, exam_type)` 唯一，每人物每种考试一份；类型为 EXAM_MENGXUE、EXAM_JINGYI、EXAM_PRE_COUNTY、EXAM_XIANSHI。
 
-每次阶段考试和最终县试都使用同一张表。`exam_type` 区分：
+准备时固定题目、通过线、基础能力分B、身体偏移R、`dice_roll`、`luck_offset`、`knowledge_total` 和发生回合。`knowledge_total` 使用 DECIMAL(16,4)，其他上述分数和骰点为整数。
 
-| 年龄 | `exam_type` |
-|---:|---|
-| 8 | `EXAM_MENGXUE` |
-| 12 | `EXAM_JINGYI` |
-| 15 | `EXAM_PRE_COUNTY` |
-| 16 | `EXAM_XIANSHI` |
+结算时保存参与方式、最终整数分和通过状态。系统代行直接使用已保存的B/R及骰点，不重新投骰；重复同一考试ID返回已完成记录。当前考试 `request_id` 仍为空，由考试ID和状态防重。
 
-创建考试时保存：
+玩家原文及 `ai_thought_bubble`、`ai_player_content_modifier`、`ai_answer_text`、`ai_content` 为玩家作答和考试AI链路预留，尚未接入时保持空值。
 
-- `save_id`、`character_id`、`exam_type` 和 `turn_number`。
-- `question_text`、`pass_threshold`。
-- `base_ability_score`、`state_offset`。
-- `ai_thought_bubble`。
-- `status`。
+## 九、约束与生命周期
 
-最终结算时补充：
+地区、装备编码唯一；运行数据通过人物/存档复合外键避免跨存档引用。删除存档会级联删除该局人物及其领域、背包、进度、事件、记忆、考试与对话；正在被人物引用的地区和被运行数据引用的装备不能直接删除。
 
-- `request_id` 与 `player_choice`。
-- 以身入局使用的 `player_input` 和 `ai_player_content_modifier`。
-- 系统代行使用的 `ai_answer_text`。
-- `final_score` 与 `ai_content`。
+本阶段不加入种子字段、随机流表、完整组织任职、关系数值、世界人口或县试后成长数据。种子仅有[引擎设计第十二节的备忘](./MVP引擎设计.md)。
 
-`pass_threshold`、`base_ability_score`、`state_offset`、`ai_player_content_modifier` 和 `final_score` 均为整数。`character_id + exam_type` 唯一，因此同一人物每种考试最多一条记录。
+## 十、新库与旧库升级
 
-前三种考试完成后继续求学；`EXAM_XIANSHI` 完成后存档结束。流程差异由存档状态和考试类型表达，不另建阶段考试表。
-
-## 九、约束与删除关系
-
-- 地区编码、装备编码唯一。
-- 人物 ID 与存档 ID 建立复合唯一键，供跨表复合外键引用。
-- 每个存档只有一条初始家庭背景。
-- 同一人物同一职业唯一。
-- 同一人物同一本书只有一条阅读进度。
-- 同一人物同一考试类型只有一条考试记录。
-- 删除存档时级联删除人物、家庭、职业、装备持有、阅读进度、事件、记忆和考试。
-- 已被人物引用的地区不能删除；行政区父节点也不能在仍有子节点时删除。
-- 装备定义被运行状态引用时不允许删除。
-
-## 十、当前不建模
-
-- 0～5 岁逐年状态和普通回合。
-- 完整明代行政区全集与历年沿革。
-- 人口、税收、政策、战争等地区运行状态。
-- 官职、权限和差遣。
-- 通用量化关系与完整操作流水。
-- 县试之后的考试和人生阶段。
-
-这些内容后续可以围绕现有地区树、人物、职业和事件继续扩展，不需要改变当前主关系。
+- 新库使用 [schema.sql](../src/main/resources/db/schema.sql)。`CREATE TABLE IF NOT EXISTS` 不会修改已有表，不能拿它代替迁移。
+- [upgrade_mvp_inventory.sql](../src/main/resources/db/upgrade_mvp_inventory.sql) 只面向本次改动前的12表版本，手动执行一次；已有同名新字段的库不适用，也不是通用迁移器。MySQL DDL会隐式提交，执行前需核对当前结构。
+- 旧记录保留：旧摘要列改成可空并保留内容；旧 BORROWED 记录不计入新背包，旧阅读进度仍保留，之后需实际领取教材。旧存档创建时间只能填升级时间。
+- 旧考试保留原B/R和结果，补中性骰点50、修正0；历史总学识未知，填0而不伪造原快照。
+- 完成结构升级后，可对旧存档调用 `POST /api/save/{saveId}/content`，补齐NPC和新增教材定义，不覆盖已有定义、不自动发书。

@@ -4,7 +4,9 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -42,10 +44,16 @@ public class GameClient {
                 new SystemMessage(definition.systemText()),
                 new UserMessage(userText)
         );
-        return chatClient.prompt(prompt)
-                .tools(tools)
-                .call()
-                .entity(type);
+        try {
+            T result = chatClient.prompt(prompt).tools(tools).call().entity(type);
+            if (result == null) {
+                throw new IllegalStateException("模型未返回有效内容");
+            }
+            return result;
+        } catch (RuntimeException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "AI调用失败，请检查网络或模型账户余额后重试", exception);
+        }
     }
 
     private PromptDefinition getPrompt(String promptCode) {

@@ -1,13 +1,23 @@
 package mvp.service;
 
+import cn.hutool.json.JSONObject;
 import com.baomidou.mybatisplus.spring.service.IService;
-import mvp.entity.CareerProfile;
+import mvp.engine.CharacterEngine.CharacterState;
+import mvp.engine.CharacterEngine.DriverResult;
+import mvp.engine.CharacterEngine.ScholarState;
 import mvp.entity.CareerProfileShusheng;
 import mvp.entity.Character;
+import mvp.entity.EventRecord;
+import mvp.entity.ExamRecord;
 import mvp.entity.FamilyBackground;
 import mvp.entity.GameSave;
 import mvp.entity.Region;
+import mvp.service.BookService.LibraryBook;
+import mvp.service.EquipmentRecordService.AcquisitionIntent;
+import mvp.service.EquipmentRecordService.InventoryItem;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface GameSaveService extends IService<GameSave> {
@@ -20,12 +30,116 @@ public interface GameSaveService extends IService<GameSave> {
     List<Region> listBirthRegions();
 
     /**
-     * 根据固定开局规则创建六岁玩家及完整初始存档。
+     * 创建六岁玩家、NPC和存档，只准备教材定义，不自动发放物品。
      *
      * @param command 玩家姓名和出生地区
-     * @return 已持久化的存档、玩家、家庭背景和书生职业档案
+     * @return 已持久化的存档、玩家、家庭背景和书生领域档案
      */
     StartLifeResult startLife(StartLifeCommand command);
+
+    /**
+     * 读取可继续游玩的存档，包括书库、考试和人生节点，不推进时间。
+     *
+     * @param saveId 存档ID
+     * @return 当前存档完整状态
+     */
+    SaveDetail loadDetail(String saveId);
+
+    /**
+     * 读取全部书目及当前人物的阅读条件、进度和学识贡献。
+     *
+     * @param saveId 存档ID
+     * @return 按书籍编码排列的书库
+     */
+    List<LibraryBook> listBooks(String saveId);
+
+    /**
+     * 结算一次固定行动，并在同一事务中保存数值、日历及触发的考试。
+     *
+     * @param saveId 存档ID
+     * @param command 稳定请求编号、行动、场景、可选书籍及预期累计回合
+     * @return 行动后的存档、实际变化、骰点和反馈；重传返回原结果
+     */
+    JSONObject executeFixedAction(String saveId, FixedActionCommand command);
+
+    /**
+     * 按考试快照完成系统代行，阶段考试恢复求学，县试结束本局。
+     *
+     * @param saveId 存档ID
+     * @param examId 已触发的考试记录ID
+     * @return 成绩、更新后的存档及是否为首次结算
+     */
+    ExamResult completeAutoExam(String saveId, String examId);
+
+    /**
+     * 查询存档入口列表，不读取完整人生事件。
+     *
+     * @return 按创建时间倒序排列的存档与人物关键身份
+     */
+    List<SaveSummary> listSaves();
+
+    /**
+     * 显式补齐存档缺失的NPC和公共教材定义，不发放物品或覆盖已有定义。
+     *
+     * @param saveId 已完成表结构升级的存档ID
+     */
+    void prepareContent(String saveId);
+
+    /**
+     * 玩家与NPC共用的固定行动结算入口。
+     *
+     * @param saveId 存档ID
+     * @param actorId 行动人物ID，空时使用玩家
+     * @param command 稳定请求编号、行动参数与预期回合
+     * @return 已保存的结算结果
+     */
+    JSONObject executeCharacterAction(String saveId, String actorId, FixedActionCommand command);
+
+    /**
+     * 使用指定人物的考试快照完成系统代行。
+     *
+     * @param saveId 存档ID
+     * @param actorId 应考人物ID，空时使用玩家
+     * @param examId 已触发的考试ID
+     * @return 考试成绩与最新存档
+     */
+    ExamResult completeCharacterExam(String saveId, String actorId, String examId);
+
+    /**
+     * 为自由行动或对话读取可交给模型的当前事实。
+     *
+     * @param saveId 存档ID
+     * @param actorId 玩家或NPC的ID
+     * @param sceneCode 当前行动场景
+     * @return 模型调用前的只读快照
+     */
+    ActionContext prepareAction(String saveId, String actorId, String sceneCode);
+
+    /**
+     * 在事务外运行自由行动图，再核对快照并保存实际结果。
+     *
+     * @param saveId 存档ID
+     * @param actorId 玩家或NPC的ID
+     * @param command 原文、场景、预期回合及稳定请求编号
+     * @return 已保存的自由行动结果
+     */
+    JSONObject executeFreeAction(String saveId, String actorId, FreeActionCommand command);
+
+    /**
+     * 在短事务中核对模型调用前快照，保存属性、交易和可选的回合推进。
+     *
+     * @param before 调用前快照
+     * @param requestId 结算请求编号
+     * @param payload 原始业务参数
+     * @param settlement 引擎计算结果，非结束对话时为空
+     * @param acquisitions 本次明确执行的获取行为
+     * @param endTurn 是否推进普通回合
+     * @param summary 行为摘要
+     * @param milestone 是否记录人生节点
+     * @return 已执行结果；重复请求返回原结果
+     */
+    JSONObject settleAiAction(ActionContext before, String requestId, Object payload, DriverResult settlement,
+                             List<AcquisitionIntent> acquisitions, boolean endTurn, String summary, boolean milestone);
 
     record StartLifeCommand(
             String characterName,
@@ -37,8 +151,57 @@ public interface GameSaveService extends IService<GameSave> {
             GameSave save,
             Character character,
             FamilyBackground familyBackground,
-            CareerProfile careerProfile,
             CareerProfileShusheng scholarProfile
     ) {
+    }
+
+    record SaveDetail(
+            GameSave save,
+            Character character,
+            FamilyBackground familyBackground,
+            CareerProfileShusheng scholarProfile,
+            List<LibraryBook> books,
+            List<ExamRecord> exams,
+            List<EventRecord> milestones,
+            BigDecimal knowledgeTotal,
+            List<InventoryItem> backpack,
+            List<Character> npcs
+    ) {
+    }
+
+    record FixedActionCommand(
+            String requestId,
+            String actionCode,
+            String sceneCode,
+            String bookCode,
+            Long expectedTurnNumber
+    ) {
+    }
+
+    record ActionChanges(
+            int progressGain,
+            ScholarState abilityGain,
+            int fatigueChange,
+            int healthChange,
+            Integer diceRoll
+    ) {
+    }
+
+    record ActionResult(SaveDetail detail, ActionChanges changes, String feedback) {
+    }
+
+    record ExamResult(SaveDetail detail, ExamRecord exam, boolean newlySettled, String feedback) {
+    }
+
+    record FreeActionCommand(String requestId, String sceneCode, String text, Long expectedTurnNumber) {
+    }
+
+    record ActionContext(String saveId, String actorId, long turnNumber, String sceneCode,
+                         CharacterState character, ScholarState scholar, String contextSummary) {
+    }
+
+    record SaveSummary(String saveId, String characterName, int age, int currentYear, String status,
+                       LocalDateTime createdAt, String officialPosition, String officialRank,
+                       String degree, List<String> titles) {
     }
 }

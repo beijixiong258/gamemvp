@@ -12,6 +12,14 @@ public final class GameRuleConstant {
     public static final int COUNTY_EXAM_AGE = 16;
     public static final int INITIAL_GENERAL_ATTRIBUTE = 20;
     public static final int INITIAL_LITERACY_ABILITY = 5;
+    public static final int INITIAL_WALLET = 2_000;
+    public static final int KNOWLEDGE_PER_EXAM_POINT = 2;
+    public static final int EXAM_LUCK_AMPLITUDE = 25;
+    public static final int SICK_TURNS = 4;
+    public static final int SICK_ATTRIBUTE_LOSS = 2;
+    public static final int SICK_RECOVERY_HEALTH = 40;
+    public static final int AI_ATTRIBUTE_CHANGE_LIMIT = 3;
+    public static final int AI_ABILITY_CHANGE_LIMIT = 5;
     public static final int MIN_INITIAL_FAMILY_WEALTH = 10_000;
     public static final int DEFAULT_INITIAL_FAMILY_WEALTH = 100_000;
     public static final int MAX_INITIAL_FAMILY_WEALTH = 1_000_000;

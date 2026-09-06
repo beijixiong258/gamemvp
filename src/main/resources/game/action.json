@@ -34,7 +34,7 @@
       "actionCode": "FREE_ACTION",
       "actionName": "自由行动",
       "actionType": "FREE_ACTION",
-      "availableSceneCode": ["SCENE_JIA", "SCENE_SISHU"],
+      "availableSceneCode": ["SCENE_JIA", "SCENE_SISHU", "SCENE_JISHI"],
       "requiredParameter": ["text"],
       "engineRuleCode": "RULE_DRIVER",
       "promptCode": "PROMPT_FREE_ACTION",
@@ -44,10 +44,19 @@
       "actionCode": "NPC_DIALOGUE",
       "actionName": "NPC对话",
       "actionType": "NPC_DIALOGUE",
-      "availableSceneCode": ["SCENE_JIA", "SCENE_SISHU"],
-      "requiredParameter": ["npcCode", "text"],
+      "availableSceneCode": ["SCENE_JIA", "SCENE_SISHU", "SCENE_JISHI"],
+      "requiredParameter": ["counterpartId"],
       "engineRuleCode": "RULE_NPC_DIALOGUE",
       "promptCode": "PROMPT_NPC_DIALOGUE",
+      "endTurn": false
+    },
+    {
+      "actionCode": "ACQUIRE_EQUIPMENT",
+      "actionName": "获取物品",
+      "actionType": "EQUIPMENT_ACTION",
+      "availableSceneCode": ["SCENE_SISHU", "SCENE_JISHI"],
+      "requiredParameter": ["requestId", "supplierNpcCode", "equipmentCode", "quantity"],
+      "engineRuleCode": "RULE_ACQUIRE_EQUIPMENT",
       "endTurn": false
     },
     {
@@ -58,7 +67,7 @@
       "requiredParameter": [],
       "engineRuleCode": "RULE_EXAM_AUTO",
       "promptCode": "PROMPT_EXAM_ANSWER",
-      "endTurn": true
+      "endTurn": false
     },
     {
       "actionCode": "EXAM_PLAYER",
@@ -68,7 +77,7 @@
       "requiredParameter": ["text"],
       "engineRuleCode": "RULE_EXAM_PLAYER",
       "promptCode": "PROMPT_EXAM_EVALUATION",
-      "endTurn": true
+      "endTurn": false
     }
   ]
 }

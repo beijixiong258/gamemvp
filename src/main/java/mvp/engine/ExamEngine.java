@@ -1,13 +1,15 @@
 package mvp.engine;
 
+import mvp.utils.Caculator;
+import org.springframework.stereotype.Component;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.Comparator;
-import java.util.List;
 
 /**
  * 考试数值引擎，负责从人物状态和题目权重计算整数成绩，不生成考试叙事。
  */
+@Component
 public class ExamEngine {
 
     /**
@@ -15,17 +17,17 @@ public class ExamEngine {
      *
      * @param character 当前人物状态
      * @param scholar 当前书生能力
-     * @param bookProgresses 人物各本书的整数阅读进度
+     * @param knowledgeTotal 人物全部已读书籍贡献的学识总量
      * @param weights 当前考试题目的计分权重
      * @return 已学知识值、基础能力分、临场偏移和思维层级
      */
     public ExamPreparation prepare(
             CharacterEngine.CharacterState character,
             CharacterEngine.ScholarState scholar,
-            List<Integer> bookProgresses,
+            BigDecimal knowledgeTotal,
             ExamWeights weights
     ) {
-        int knowledgeScore = knowledgeScore(bookProgresses);
+        int knowledgeScore = knowledgeScore(knowledgeTotal);
         int baseAbilityScore = baseAbilityScore(character, scholar, knowledgeScore, weights);
         int stateOffset = stateOffset(character);
         return new ExamPreparation(
@@ -37,25 +39,30 @@ public class ExamEngine {
     }
 
     /**
-     * 把阅读进度转换成知识阶段分，并按最高三本书汇总。
+     * 将不封顶的总学识换算成考试知识分，首版每2学识为1分。
      *
-     * @param bookProgresses 人物各本书的整数阅读进度
-     * @return 0到100之间的整数知识值
+     * @param knowledgeTotal 全部书籍贡献的学识总量
+     * @return 0到100的考试知识分
      */
-    public int knowledgeScore(List<Integer> bookProgresses) {
-        List<Integer> topScores = bookProgresses.stream()
-                .map(this::knowledgeStageScore)
-                .sorted(Comparator.reverseOrder())
-                .limit(3)
-                .toList();
-        int first = topScores.size() > 0 ? topScores.get(0) : 0;
-        int second = topScores.size() > 1 ? topScores.get(1) : 0;
-        int third = topScores.size() > 2 ? topScores.get(2) : 0;
-        return Utils.roundToInt(
-                BigDecimal.valueOf(first).multiply(Utils.decimal("0.50"))
-                        .add(BigDecimal.valueOf(second).multiply(Utils.decimal("0.30")))
-                        .add(BigDecimal.valueOf(third).multiply(Utils.decimal("0.20")))
-        );
+    public int knowledgeScore(BigDecimal knowledgeTotal) {
+        return Caculator.clamp(0, 100, Caculator.roundToInt(
+                Caculator.divide(knowledgeTotal, GameRuleConstant.KNOWLEDGE_PER_EXAM_POINT)));
+    }
+
+    /**
+     * 普通骰点采用立方曲线，中间影响小、两端影响大。
+     *
+     * @param diceRoll 已保存的1D100骰点
+     * @return -25至25的整数修正；1和100还会在最终结算覆盖结果
+     */
+    public int luckOffset(int diceRoll) {
+        if (diceRoll < 1 || diceRoll > 100) {
+            throw new IllegalArgumentException("骰点必须在1至100之间");
+        }
+        BigDecimal position = BigDecimal.valueOf(diceRoll).subtract(Caculator.decimal("50.5"))
+                .divide(Caculator.decimal("49.5"), 8, RoundingMode.HALF_UP);
+        return Caculator.roundToInt(position.pow(3).multiply(
+                BigDecimal.valueOf(GameRuleConstant.EXAM_LUCK_AMPLITUDE)));
     }
 
     /**
@@ -84,7 +91,7 @@ public class ExamEngine {
                 .add(BigDecimal.valueOf(scholar.abilityCelun()).multiply(weights.abilityCelun()))
                 .add(BigDecimal.valueOf(scholar.abilityWenxue()).multiply(weights.abilityWenxue()))
                 .add(BigDecimal.valueOf(knowledgeScore).multiply(weights.knowledge()));
-        return Utils.clamp(0, 100, Utils.roundToInt(score));
+        return Caculator.clamp(0, 100, Caculator.roundToInt(score));
     }
 
     /**
@@ -95,17 +102,17 @@ public class ExamEngine {
      */
     public int stateOffset(CharacterEngine.CharacterState character) {
         BigDecimal healthModifier = BigDecimal.valueOf(character.characterJiankang() - 70L)
-                .multiply(Utils.decimal("0.06"));
+                .multiply(Caculator.decimal("0.06"));
         BigDecimal fatigueModifier = BigDecimal.valueOf(-Math.max(0, character.characterPilao() - 20L))
-                .multiply(Utils.decimal("0.08"));
+                .multiply(Caculator.decimal("0.08"));
         BigDecimal fitnessModifier = BigDecimal.valueOf(character.characterTineng() - 50L)
-                .multiply(Utils.decimal("0.03"));
-        BigDecimal result = Utils.clamp(
-                Utils.decimal("-8"),
-                Utils.decimal("4"),
+                .multiply(Caculator.decimal("0.03"));
+        BigDecimal result = Caculator.clamp(
+                Caculator.decimal("-8"),
+                Caculator.decimal("4"),
                 healthModifier.add(fatigueModifier).add(fitnessModifier)
         );
-        return Utils.roundToInt(result);
+        return Caculator.roundToInt(result);
     }
 
     /**
@@ -128,16 +135,18 @@ public class ExamEngine {
     }
 
     /**
-     * 结算系统代行路径，成绩只由角色能力和临场状态决定。
+     * 结算系统代行路径，在角色能力及身体状态基础上应用已冻结的骰点。
      *
      * @param baseAbilityScore 基础能力分
      * @param stateOffset 临场状态偏移
+     * @param diceRoll 考试开始时保存的骰点，不能在重传时重投
+     * @param luckOffset 考试准备时已保存的普通骰点修正
      * @param passThreshold 当前考试通过线
      * @return 最终成绩与通过状态
      */
-    public ExamResult settleAuto(int baseAbilityScore, int stateOffset, int passThreshold) {
-        int finalScore = Utils.clamp(0, 100, baseAbilityScore + stateOffset);
-        return result(finalScore, 0, passThreshold);
+    public ExamResult settleAuto(int baseAbilityScore, int stateOffset, int diceRoll, int luckOffset, int passThreshold) {
+        int finalScore = Caculator.clamp(0, 100, baseAbilityScore + stateOffset + luckOffset);
+        return result(finalScore, 0, diceRoll, passThreshold);
     }
 
     /**
@@ -146,6 +155,8 @@ public class ExamEngine {
      * @param baseAbilityScore 基础能力分
      * @param stateOffset 临场状态偏移
      * @param contentModifier 答案评价Resolver给出的内容修正
+     * @param diceRoll 考试开始时保存的骰点，不能在重传时重投
+     * @param luckOffset 考试准备时已保存的普通骰点修正
      * @param passThreshold 当前考试通过线
      * @return 最终成绩、实际采用的内容修正与通过状态
      */
@@ -153,38 +164,21 @@ public class ExamEngine {
             int baseAbilityScore,
             int stateOffset,
             BigDecimal contentModifier,
+            int diceRoll,
+            int luckOffset,
             int passThreshold
     ) {
-        int effectiveContentModifier = Utils.clamp(
+        int effectiveContentModifier = Caculator.clamp(
                 -25,
                 25,
                 contentModifier.setScale(0, RoundingMode.HALF_UP).intValue()
         );
-        int finalScore = Utils.clamp(
+        int finalScore = Caculator.clamp(
                 0,
                 100,
-                baseAbilityScore + stateOffset + effectiveContentModifier
+                baseAbilityScore + stateOffset + effectiveContentModifier + luckOffset
         );
-        return result(finalScore, effectiveContentModifier, passThreshold);
-    }
-
-    /**
-     * 把一本书的阅读进度映射为考试知识阶段分。
-     *
-     * @param progress 该书的整数阅读进度
-     * @return 0、35、70或100
-     */
-    private int knowledgeStageScore(int progress) {
-        if (progress >= 100) {
-            return 100;
-        }
-        if (progress >= 60) {
-            return 70;
-        }
-        if (progress >= 25) {
-            return 35;
-        }
-        return 0;
+        return result(finalScore, effectiveContentModifier, diceRoll, passThreshold);
     }
 
     /**
@@ -192,11 +186,13 @@ public class ExamEngine {
      *
      * @param finalScore 已收束的最终分
      * @param effectiveContentModifier 实际采用的玩家内容修正
+     * @param diceRoll 考试开始时保存的骰点，不能在重传时重投
      * @param passThreshold 当前考试通过线
      * @return 包含完成状态的考试结果
      */
-    private ExamResult result(int finalScore, int effectiveContentModifier, int passThreshold) {
-        boolean passed = finalScore >= passThreshold;
+    private ExamResult result(int finalScore, int effectiveContentModifier, int diceRoll, int passThreshold) {
+        finalScore = diceRoll == 1 ? 0 : diceRoll == 100 ? 100 : finalScore;
+        boolean passed = diceRoll != 1 && (diceRoll == 100 || finalScore >= passThreshold);
         return new ExamResult(
                 finalScore,
                 effectiveContentModifier,

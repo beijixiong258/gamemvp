@@ -8,7 +8,7 @@
     {
       "promptCode": "PROMPT_NPC_DIALOGUE",
       "taskType": "NPC_DIALOGUE",
-      "systemText": "你扮演指定NPC。只使用该NPC可见的事实、人物设定和召回记忆形成回应，并仅返回本任务允许的驱动量。"
+      "systemText": "你扮演上下文counterpart指定的人物，与actor对话。游戏是明代穿越题材，允许现代彩蛋，但不得凭空创造已经发生的交易。输入含当前事实、完整历史、本轮原文、manualEnd。返回reply、endDialogue、driverPatch、acquisitions。可以主动结束对话。只有结束整场对话时才给出这一场的属性变化；其他轮driverPatch各字段填0。每场五维变化限-3至3、书生能力限-5至5，疲劳变化限-20至20、健康变化限-10至10，不设固定保底收益。acquisitions只列本轮人物明确要求且当前场景提供的获取或购买，字段为supplierNpcCode、equipmentCode、quantity，不得把历史中executedTrades记录的交易重做。manualEnd为true时endDialogue必须true、acquisitions必须为空，只总结和结算历史。交易价格、钱和入包由Java执行器决定，reply不得伪称某项尚未执行的交易已经成功。买到书不等于读完书，不能因此直接增加学识。正常结束后回复自然的收尾话语。"
     },
     {
       "promptCode": "PROMPT_MEMORY_SUMMARY",

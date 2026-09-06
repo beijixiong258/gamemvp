@@ -1,520 +1,161 @@
 # 古代穿越人生模拟游戏 MVP 引擎设计
 
-> 本文只定义 MVP 的数值计算、行动流程和智能体 Resolver 编排。玩法边界见[《MVP设计文档》](./MVP设计文档.md)，表结构见[《MVP数据模型设计》](./MVP数据模型设计.md)。
+本文定义数值、行动时序与Resolver编排。接口和参数见[核心方法参考](./开发者手册/核心方法参考.md)，表结构见[数据模型设计](./MVP数据模型设计.md)，首版数值和问题集中见[机制总览](./MVP机制总览与待定事项.md)。所有“首版参数”都可继续调整，不表示最终平衡。
 
-## 一、引擎边界
+## 一、职责边界
 
-Java 引擎把当前状态与行动输入结算成新的确定状态。相同输入必须得到相同输出。
+- CharacterEngine：人物、阅读、练习、休息、驱动量、学识贡献、重病的数值关系。
+- TurnEngine：一局共用的日历及8/12/15/16岁节点。
+- ExamEngine：学识换算、B/R、骰点曲线与整数考试结果。
+- FreeActionResolver：解析自由行动和对话，给出驱动量与本轮获取意图。
+- Service：读取实际状态、生成骰点、执行交易、保存状态和请求回执。
 
-- `CharacterEngine`：开始人生、读书、练习文章、休息、自由行动驱动量。
-- `TurnEngine`：回合、月份、年份、年龄和考试节点。
-- `ExamEngine`：考试准备、角色思路层级和最终成绩。
-- Resolver：理解自然语言，生成结构化驱动量或叙事。
-- Service：读取数据、组织调用并保存结果。
+引擎不访问数据库、不调用模型、不自行掷骰。同一快照、规则和显式骰点输入得到相同结果；实际游戏的阅读/考试包含业务层生成的随机骰点。UUID主键不属于玩法随机或种子。
 
-Engine 不访问数据库、不调用模型、不管理事务，也不直接生成叙事。Resolver 不推进时间、不直接写最终属性或考试结果。
+## 二、数值与精度
 
-## 二、统一数值规则
-
-### 1. 范围与精度
-
-| 数值 | 范围 | 持久化精度 |
-|---|---:|---:|
-| 五项通用属性 | 0～100 | 整数 |
-| 五项书生能力 | 0～100 | 整数 |
-| 健康、疲劳 | 0～100 | 整数 |
-| 单本书阅读进度 | 0～100 | 整数 |
-| 初始家庭财富 | 10000～1000000 | 整数，单位为文 |
-| 考试各项分数 | 0～100 | 整数 |
-
-中间计算使用 `BigDecimal`，写入整数状态前统一按 `HALF_UP` 四舍五入。所有公式都不使用不确定项。
+五维、五项书生能力、健康和疲劳均为0～100整数；阅读进度为0～100整数；金额和考试分数为整数。中间使用BigDecimal，整数结果按HALF_UP四舍五入，再限制范围。学识允许小数，全书求和后才在进入考试时取整。
 
 ```text
 clamp(min, max, value) = min(max, max(min, value))
 ```
 
-`clamp` 的含义是把值限制在闭区间内。例如 `clamp(0, 100, 120) = 100`，`clamp(0, 100, -3) = 0`。
+实际变化用最终值减原值计算，不把超出上限的理论增长当作已获得收益。首版参数集中在GameRuleConstant及教材JSON。
 
-### 2. 结算顺序
+## 三、开始人生与人物
 
-一次结算遵循固定顺序：
+出生1541年，六岁开局1547年正月第一回合，累计回合0；五维20、健康75、疲劳0、识字5，其余领域能力0。不逐年模拟0～5岁，不调用模型生成童年。
 
-```text
-读取当前整数状态
-  ↓
-完成中间计算
-  ↓
-按HALF_UP取整
-  ↓
-按字段范围clamp
-  ↓
-返回After状态与实际差值
-```
+家庭背景固定100000文，属于出生事实；人物钱包初始2000文，属于可变运行状态。玩家与NPC同表、同领域结构、同背包和行为方法。开局创建固定NPC、补齐公共教材定义，但背包为空，必须先实际获取。
 
-实际差值以收束后的状态为准。例如能力已经是 100，即使原始增长为 2，最终实际增长仍是 0。
+地区使用父节点树；MVP出生可选惠州的博罗、海丰。不持久化当前场景或移动过程，行为携带场景编码。
 
-## 三、开始人生
+## 四、阅读、学识与1D100
 
-玩家先选择出生地，再点击一次“开始人生”。引擎不建立 0～5 岁逐年回合，而是直接返回六岁时的可玩状态。
+### 1. 常规学习公式
 
 ```text
-出生年份 = 1541
-当前年份 = 1547（嘉靖二十六年）
-当前月份 = 1
-年龄 = 6
-月内回合 = 1
-累计结束回合数 = 0
-成长阶段 = STUDYING
-
-智力、道德、政治、交际、体能 = 20
-健康 = 75
-疲劳 = 0
-
-识字 = 5
-经义、文章、策论、文学 = 0
-
-初始家庭财富 = 100000文
-家庭背景摘要 = 家中有一定田产和积蓄，能够供角色入塾读书
-出生地区ID = 玩家选择
-当前地区ID = 出生地区ID
+智力系数 = 0.75 + 0.50 × 智力 / 100
+身体系数 = clamp(0.55, 1.20, 0.65 + 健康×0.003 + 体能×0.002 - 疲劳×0.003)
+阅读基础 = 智力×0.40 + 识字×0.60
+难度系数 = clamp(0.60, 1.20, 1 + (阅读基础 - 难度) / 100)
+学习量 = 基础进度 × 智力系数 × 身体系数 × 难度系数
+普通进度增量 = min(剩余进度, max(0, round(学习量)))
+综合能力 = 五项书生能力按本书百分比权重求和
+递减系数 = clamp(0.20, 1, 1 - 综合能力 / 120)
+学习池 = (0.50 + 0.20 × 学习量) × 递减系数 × 温习系数
+单项能力增量 = round(学习池 × 本书该项权重 / 100)
 ```
 
-MVP 出生地由 Service 查询惠州 `CITY` 节点的 `COUNTY` 子节点，因此当前只有博罗县和海丰县。行政区本身不保存玩法专用的出生地标记。
+未读满时温习系数为1，读满后为0.35。各项能力分别取整，小于0.5的收益仍会变为0；余量机制未引入。学习需要背包有书并同时满足配置的年龄、属性、能力及前置阅读条件。
 
-当前 `GameSaveService.startLife` 已实现这段用例：先校验出生地，再分别调用 `CharacterEngine.startLife` 和 `TurnEngine.startLife`，最后在同一事务中保存存档、玩家、初始家庭背景、书生职业及书生能力档案。该流程不调用模型，也不产生随机值。
+### 2. 阅读骰点
 
-0～5 岁只形成一段童年摘要，不参与属性计算，不产生普通回合。
+业务层在有效阅读时生成1～100骰点，作为readBook的显式参数。1：进度与能力收益为0；100：直接补满进度，但只获得本回合正常能力收益；2～99：按常规公式。所有结果都消耗一次普通回合并结算该书疲劳，不因为1而退款回合。
 
-## 四、人物状态公式
+阅读骰点、实际变化及结果保存在请求回执中，重传原requestId返回原结果。首次读满保存BOOK_MASTERED节点，不再保存首次60节点。
 
-### 1. 智力效率
+### 3. 学识贡献
 
 ```text
-intelligenceFactor = 0.75 + 0.50 × 智力 / 100
+p = 0：贡献0
+1 ≤ p ≤ 99：贡献 = 单书满学识 × 0.6 × p / 100
+p = 100：贡献 = 单书满学识
+总学识 = 全部不同书籍的贡献之和
+考试知识分K = clamp(0, 100, round(总学识 / 2))
 ```
 
-属性范围为 0～100，因此该因子范围为 0.75～1.25。
+“不同书籍”按装备定义ID区分，不按背包副本数区分。总学识不封顶。书籍简介不分25/60/100阈值展示；此前最高三本及阶段知识分算法已删除。
 
-### 2. 身体状态效率
+## 五、练习、休息、五维成长
 
-```text
-conditionFactor
-= clamp(
-    0.55,
-    1.20,
-    0.65
-    + 0.003 × 健康
-    + 0.002 × 体能
-    - 0.003 × 疲劳
-  )
-```
+练习文章的原始增长为 `2.40 × 智力系数 × 身体系数 × clamp(0.25, 1, 1 - 文章/120)`，取整后加入文章能力，基础疲劳4。
 
-### 3. 疲劳增长
+休息恢复疲劳 `18 + round(体能×0.10)`，恢复健康 `3 + 体能/25的整数商 + (原疲劳≥70 ? 1 : 0)`，再限制到0～100。
 
-```text
-fitnessCostFactor = 1.15 - 体能 / 200
-lowHealthFactor = 1 + max(0, 60 - 健康) / 100
+五维成长由自定义行为及整场对话的AI驱动量提供，固定读书和练习仍主要增加领域能力。每场五维变化限±3、领域能力±5、疲劳±20、健康±10，缺省字段为0，不设交互保底成长。applyDriver计算实际变化，不让AI直接指定最终属性。
 
-fatigueGain
-= max(
-    1,
-    round(行动基础疲劳 × fitnessCostFactor × lowHealthFactor)
-  )
-```
+## 六、疲劳与重病
 
-行动基础疲劳不大于 0 时，疲劳增长直接为 0。
+工作疲劳为 `round(基础疲劳 × (1.15 - 体能/200) × (1 + max(0,60-健康)/100))`，基础疲劳大于0时至少增加1。结算后疲劳超过80，每超过10点（向上取整）损失1健康。
 
-### 4. 过劳伤害
+健康归零且尚未进入重病时，五维各减2，保存4个重病回合。每回合强制推进日历、疲劳减20；最后一回合恢复健康40。属性损失仅在入场发生一次，不在每次刷新页面时反复扣除。
 
-```text
-exhaustionDamage
-= fatigueAfter <= 80
-  ? 0
-  : ceil((fatigueAfter - 80) / 10)
-```
-
-读书、练习文章或自由行动增加疲劳后执行该计算；休息不触发过劳伤害。
-
-## 五、固定行动
-
-### 1. 读书 `READ_BOOK`
-
-#### 阅读进度
-
-```text
-readingFoundation = 0.40 × 智力 + 0.60 × 识字
-
-difficultyFactor
-= clamp(
-    0.60,
-    1.20,
-    1 + (readingFoundation - 书籍难度) / 100
-  )
-
-studyAmount
-= 单回合基础进度
-  × intelligenceFactor
-  × conditionFactor
-  × difficultyFactor
-
-progressGain
-= min(
-    完成所需进度 - 当前进度,
-    max(0, round(studyAmount))
-  )
-
-progressAfter
-= clamp(0, 完成所需进度, 当前进度 + progressGain)
-```
-
-阅读进度与单回合增长都使用整数。书已经读完时，进度不再增加，但仍可温习。
-
-#### 能力成长
-
-```text
-weightedAbility
-= Σ(某项书生能力 × 书籍对应权重)
-
-diminishingFactor
-= clamp(0.20, 1.00, 1 - weightedAbility / 120)
-
-reviewFactor = 当前进度已完成 ? 0.35 : 1.00
-
-learningPool
-= (0.50 + 0.20 × studyAmount)
-  × diminishingFactor
-  × reviewFactor
-
-某项能力增长
-= round(learningPool × 该项权重)
-```
-
-五项能力分别取整和收束。低于 0.5 的单次原始增长会取为 0，需通过书籍基础进度和能力权重调整成长速度。
-
-#### 阅读记录
-
-每次阅读后：
-
-- `totalReadTurnNumber` 加 1。
-- `lastReadTurnNumber` 写入本次行动推进后的总回合编号。
-- 首次跨过 60 产生“已可用”节点。
-- 首次达到 100 产生“已掌握”节点并设置 `completed=true`。
-
-### 2. 练习文章 `PRACTICE_WRITING`
-
-```text
-writingDiminishing
-= clamp(0.25, 1.00, 1 - 文章能力 / 120)
-
-rawGain
-= 2.40
-  × intelligenceFactor
-  × conditionFactor
-  × writingDiminishing
-
-文章能力增长 = max(0, round(rawGain))
-```
-
-基础疲劳为 4，再套用通用疲劳公式。该行动只直接训练文章能力。
-
-### 3. 休息 `REST`
-
-```text
-fatigueRecovery = 18 + round(体能 × 0.10)
-fatigueAfter = max(0, 疲劳 - fatigueRecovery)
-
-healthRecovery
-= 3
-  + floor(体能 / 25)
-  + (休息前疲劳 >= 70 ? 1 : 0)
-
-healthAfter = min(100, 健康 + healthRecovery)
-```
-
-休息结束一个回合，不增加人物属性或书生能力。
-
-## 六、自由行动
-
-Resolver 把玩家原文转换为 `DriverPatch`：
-
-| 驱动量 | 目标 |
-|---|---|
-| `attribute_intelligence_gain` | 智力 |
-| `attribute_morality_gain` | 道德 |
-| `attribute_politics_gain` | 政治 |
-| `attribute_social_gain` | 交际 |
-| `attribute_fitness_gain` | 体能 |
-| `ability_shizi_gain` | 识字 |
-| `ability_jingyi_gain` | 经义 |
-| `ability_wenzhang_gain` | 文章 |
-| `ability_celun_gain` | 策论 |
-| `ability_wenxue_gain` | 文学 |
-| `fatigue_offset` | 疲劳 |
-| `health_offset` | 健康 |
-
-Engine 负责最终结算：
-
-```text
-属性After = clamp(0, 100, 属性Before + round(gain))
-能力After = clamp(0, 100, 能力Before + round(gain))
-疲劳After = clamp(0, 100, 疲劳Before + round(fatigueOffset))
-健康After = clamp(0, 100, 健康Before + round(healthOffset) - exhaustionDamage)
-```
-
-影响分用于判断是否值得形成长期事件：
-
-```text
-impactScore
-= 4 × Σ|通用属性变化|
-  + 4 × Σ|书生能力变化|
-  + 0.5 × |健康变化|
-  + 0.25 × |疲劳变化|
-```
-
-事件摘要必须基于已经结算的实际差值。
+重病逐回合推进，不一次跳跃多岁。进入考试节点后暂停休养，考试结算后继续剩余回合；县试后存档完成，不再推进。阅读/自由行动导致健康归零时自动进入该流程；已有重病状态的固定行动请求只执行休养。没有死亡或后台计时。
 
 ## 七、回合与阶段
 
-### 1. 时间推进
+每月4回合、每年12月，跨年增加年龄。固定行动和自由行动消耗一回合；直接获取与普通对话不消耗回合。对话结束引发重病时仍可能强制经过休养回合。
 
-`totalTurnNumber` 表示已完成的结束回合行动数；`turnInMonth` 表示即将进行的月内回合，取 1～4。
+8/12/15/16岁的节点对应累计96/288/432/480普通回合，通过线35/45/52/60。这里的普通回合包含强制休养回合。前三场无论通过或失败均继续求学，最后县试结算后进入COMPLETED。
 
-```text
-endTurn = false:
-  时间不变
+## 八、考试快照与随机修正
 
-endTurn = true:
-  totalTurnNumber += 1
-
-  if turnInMonth < 4:
-    turnInMonth += 1
-  else:
-    turnInMonth = 1
-    currentMonth += 1
-
-  if currentMonth > 12:
-    currentMonth = 1
-    currentYear += 1
-    age = currentYear - birthYear
-```
-
-月份变化不自动增加收入、恢复健康或推动 NPC。
-
-### 2. 考试节点
-
-| 年龄 | 考试编码 | 名称 | 通过线 | 结束人生阶段 |
-|---:|---|---|---:|---:|
-| 8 | `EXAM_MENGXUE` | 蒙学阶段考 | 35 | 否 |
-| 12 | `EXAM_JINGYI` | 经义阶段考 | 45 | 否 |
-| 15 | `EXAM_PRE_COUNTY` | 县试预考 | 52 | 否 |
-| 16 | `EXAM_XIANSHI` | 县试 | 60 | 是 |
-
-跨年后年龄命中考试节点时，`TurnEngine` 暂停普通成长行动。前三次考试无论通过或未通过，结算后都恢复 `STUDYING`；十六岁县试结算后存档进入 `COMPLETED`。
-
-从六岁第一回合到四次考试的累计结束回合数分别为：
+prepare使用刚结算后的五维、领域能力和总学识，计算题目权重和得到的B，以及身体偏移R：
 
 ```text
-8岁：96
-12岁：288
-15岁：432
-16岁：480
+R = round(clamp(-8, 4,
+    (健康-70)×0.06 - max(0,疲劳-20)×0.08 + (体能-50)×0.03))
+x = (骰点 - 50.5) / 49.5
+普通运气修正L = round(25 × x³)
 ```
 
-考试本身不额外推进普通月内回合。
+题目、通过线、B、R、总学识、骰点和L一起保存。L在准备时计算，结算使用已经保存的值，不随以后修改参数而重算。
 
-## 八、考试数值
+- 骰点1：最终0分，强制失败。
+- 骰点100：最终100分，强制通过。
+- 骰点2～99：系统代行最终分 `clamp(0,100,B+R+L)`。
+- 玩家作答的引擎公式为上述普通分再加 `clamp(-25,25,round(M))`；极端骰点仍覆盖结果。玩家作答接口和评价Resolver尚未接入。
 
-### 1. 题目
+思维层级仍按B+R的35/60/80分界提供，但当前不生成考试思维泡泡、AI答卷或评价。系统代行重复考试ID返回原成绩，不重复推进阶段或保存节点。
 
-每个考试类型在 `exam.json` 中只配置一道题，进入节点后直接使用该题。题目原文和分数线写入考试记录，结算期间不再改变。
+## 九、统一获取与请求回执
 
-### 2. 已学知识值 `K`
+EquipmentRecordService.acquire接收存档、行为人物、提供者、装备编码、数量、场景与requestId。价格和提供者来自数据库定义，不能由模型指定；免费教材价格0。首版供应不限制库存，不扣供应者的背包。
 
-每本书按整数阅读进度转换为阶段分：
+一次业务事务中完成买方扣款、供应者收款、背包记录和event_record回执。同种物品允许多条获取记录，读取背包时合计数量。对话与自由行动解析出的acquisitions调用此方法，不把自然语言叙事当作发货。
 
-| 进度 | 阶段分 |
-|---:|---:|
-| `< 25` | 0 |
-| `25～59` | 35 |
-| `60～99` | 70 |
-| `100` | 100 |
+请求防重按saveId/requestId，不按装备名。同一编号配同一参数返回原结果，换参数拒绝。固定行动另查expectedTurnNumber，对话另查expectedVersion。同一存档沿用基础行锁；共享目录初始化等复杂竞争暂不额外治理。
 
-取最高的三本书，缺少位置按 0：
+## 十、智能体与对话编排
+
+自由行动：
 
 ```text
-K = round(0.50 × K1 + 0.30 × K2 + 0.20 × K3)
+只读ActionContext快照
+→ LangGraph START → resolve_action → settle_driver → END
+→ 短事务核对人物/领域/回合快照
+→ 实际执行acquisitions
+→ 保存属性、普通回合、考试与请求回执
 ```
 
-### 3. 基础能力 `B`
+图状态仍是单次请求状态，不是存档或对话会话。FreeActionResolution携带driverPatch、eventSummary、lifeMilestone和acquisitions；节点输入和获取意图支持序列化。模型输出不直接写数据库，事务内执行由Service负责。
 
-题目配置五项通用属性、五项书生能力与 `K` 的权重，全部权重合计为 1：
+对话复用FreeActionResolver.resolveDialogue和GameClient，不另建对话专用图。dialogue_record保存完整本场历史和版本，调用模型前读快照，模型完成后再进入短事务校对版本。普通往返只保存回应及真实交易；手动或智能体结束时才应用整场驱动量。手动结束不接收任何获取意图，避免重放历史交易。
 
-```text
-B
-= round(
-    Σ(通用属性 × 对应权重)
-    + Σ(书生能力 × 对应权重)
-    + K × knowledgeWeight
-  )
+AI调用失败返回错误并提示网络或账户余额；配置关闭自动重试。不给失败调用伪造驱动量或成功文本。当前模型上下文包含本场事实/历史，没有跨场RAG或完整NPC自主调度。
 
-B = clamp(0, 100, B)
-```
+## 十一、参数与后续边界
 
-### 4. 临场状态偏移 `R`
+数值仍需结合玩法继续调整：学识换算比例、付费书强度、骰点修正幅度、AI成长限幅、重病时长、免费获取限制、钱包收入、对话耗时与小数余量。
 
-```text
-healthModifier = (健康 - 70) × 0.06
-fatigueModifier = -max(0, 疲劳 - 20) × 0.08
-fitnessModifier = (体能 - 50) × 0.03
+现在只实现共享行为能力，不等于NPC会在后台自动生活。政治线只预留身份展示字段，不实现任期/权限或自动授予学位。旧库需显式升级；内容补齐不自动领取书籍。详见机制总览的问题清单。
 
-R
-= round(
-    clamp(
-      -8,
-      4,
-      healthModifier + fatigueModifier + fitnessModifier
-    )
-  )
-```
+## 十二、种子的暂定设计（延后，不接入 MVP）
 
-`R` 只反映当时身体状态，保存为 `exam_record.state_offset`。
+### 1. 当前边界
 
-### 5. 思维泡泡
+种子只作为未来需要复现骰点时的设计备忘，不加入 Java 字段、数据库列、资源配置或接口参数。暂不实现存档种子、固定种子初始化及种子切换功能。1D100 已进入源码规则，不因暂缓种子而取消。
 
-引擎按 `B + R` 给出层级：
+当前 1D100 由业务层为一次有效行动生成骰点，再把骰点作为引擎输入；引擎只按输入计算。已完成结算保存实际骰点及结果，同一次请求重传返回已保存结果，不再次掷骰。防止重复扣款、发货和属性增长依赖行为请求编号与结算记录，不依赖种子。
 
-| 分数 | 层级 |
-|---:|---|
-| `< 35` | `DIFFICULT` |
-| `35～59` | `BASIC` |
-| `60～79` | `ORGANIZED` |
-| `>= 80` | `CONFIDENT` |
+### 2. 未来候选方案
 
-Resolver 只接收该层级、题目和角色已达到相应进度的知识摘要，生成提示思路，不生成标准答案。
+- 每份新存档生成并保存一个种子，读档沿用；是否允许玩家自选种子以后再定。
+- 将存档种子、稳定的行为编号、骰点用途及算法版本共同用于派生该次骰点。用途区分阅读、考试等，避免一种行为额外掷骰后改变其他行为的结果。
+- 同一行为需要多个骰点时，再使用固定的子序号区分；不把网络重试次数、模型调用次数或当前时间用作已确定行为的重新投骰依据。
+- 保存实际骰点作为既有结算的依据。将来调整算法时不重算已经完成的行动；具体派生算法、版本字段及旧存档补种子策略均未选定，不提前增加代码或表结构。
 
-### 6. 两种结算
+### 3. 不承诺的能力
 
-系统代行：
-
-```text
-finalScore = clamp(0, 100, B + R)
-```
-
-以身入局时，Resolver 只评价玩家答案的内容贡献 `M`：
-
-```text
-effectiveM = clamp(-25, 25, round(M))
-finalScore = clamp(0, 100, B + R + effectiveM)
-```
-
-```text
-passed = finalScore >= passThreshold
-```
-
-最终分数、`M` 与分数线均按整数保存。Resolver 生成的答卷、评价和结果叙事不反向修改成绩。
-
-## 九、Resolver 编排
-
-### 1. 固定行动
-
-```text
-Service读取人物、职业及内容配置
-  ↓
-直接调用CharacterEngine
-  ↓
-按endTurn调用TurnEngine
-  ↓
-短事务保存After状态、事件和时间
-```
-
-读书、练习文章和休息不调用模型。
-
-### 2. 自由行动
-
-```text
-加载当前人物、初始家庭背景、场景和少量相关记忆
-  ↓
-FreeActionResolver输出DriverPatch与事件语义
-  ↓
-CharacterEngine计算实际状态变化
-  ↓
-MemoryResolver按已发生事实生成必要记忆
-  ↓
-短事务保存状态、事件、记忆和时间
-```
-
-当前第一阶段已经落地的 LangGraph 只覆盖一次模型解析和一次确定性结算：
-
-```text
-START
-  ↓
-resolve_action：FreeActionResolver生成DriverPatch和事件语义
-  ↓
-settle_driver：CharacterEngine.applyDriver结算最终数值
-  ↓
-END
-```
-
-入口为 `FreeActionWorkflow.execute`。图状态只保存本次调用需要的输入快照、Resolver 输出和结算结果；数据库读取、记忆生成、时间推进与持久化仍留给后续 Service 编排，不属于当前这张图。
-
-### 3. NPC 对话
-
-```text
-加载NPC公开设定、当前场景、共同事件和相关记忆
-  ↓
-NpcDialogueResolver生成回应与重要事件语义
-  ↓
-普通回应直接返回；重要事件保存事件与记忆
-```
-
-NPC 对话默认 `endTurn=false`，也不直接改变数值。需要改变知识或物品时，应转成后续明确行动。
-
-### 4. 考试
-
-```text
-ExamEngine.prepare计算K、B、R和思维层级
-  ↓
-ExamThoughtResolver生成角色思维泡泡
-  ↓
-保存READY考试记录
-  ↓
-玩家选择系统代行或以身入局
-  ├─ 系统代行：ExamEngine.settleAuto
-  └─ 以身入局：ExamEvaluationResolver给出M，再调用settlePlayer
-  ↓
-引擎固定分数与通过状态
-  ↓
-Resolver按结果生成展示文本
-  ↓
-短事务保存考试结果并恢复求学或完成存档
-```
-
-模型调用放在事务外；同一存档的操作按顺序执行。
-
-## 十、实现入口
-
-当前基础引擎入口为：
-
-```text
-CharacterEngine.startLife
-CharacterEngine.readBook
-CharacterEngine.practiceWriting
-CharacterEngine.rest
-CharacterEngine.applyDriver
-
-TurnEngine.startLife
-TurnEngine.advance
-TurnEngine.completeExam
-TurnEngine.examTypeAtAge
-TurnEngine.jiajingYear
-
-ExamEngine.prepare
-ExamEngine.settleAuto
-ExamEngine.settlePlayer
-
-FreeActionWorkflow.execute
-FreeActionResolver.resolve
-GameClient.chat
-```
-
-三个 Engine 只表达规则；`FreeActionWorkflow` 已负责自由行动中 Resolver 与人物引擎的两节点编排。`GameSaveService` 已完成“开始人生”的输入校验、快照转换和事务持久化；读书、考试等后续用例仍由相应 Service 继续承接数据库、时间与记忆编排。
+相同种子只用于复现相同规则版本及相同行为输入下的骰点，不保证不同操作顺序产生相同人生，也不保证模型每次返回相同内容。种子方案不承担防作弊、复杂并发治理或完整世界回放；这些不属于当前任务。

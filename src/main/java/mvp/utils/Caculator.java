@@ -1,13 +1,13 @@
-package mvp.engine;
+package mvp.utils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
-final class Utils {
+final class Caculator {
 
     static final BigDecimal ONE = BigDecimal.ONE;
 
-    private Utils() {
+    private Caculator() {
     }
 
     static BigDecimal decimal(String value) {

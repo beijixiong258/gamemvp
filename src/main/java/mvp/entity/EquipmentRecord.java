@@ -19,8 +19,8 @@ public class EquipmentRecord {
     private String saveId; // 装备记录所属的游戏存档ID
     private String characterId; // 当前持有或使用该装备的人物ID
     private String equipmentId; // 对应的装备定义ID
-    private String AIText; // 由AI生成的装备来源
-    private Long acquiredTurnNumber; // 人物取得该装备或使用权时的总回合编号
-    private Long expirationTurnNumber; // 临时使用权到期的总回合编号，永久持有时为空
-    private String status; // 装备记录当前状态，例如有效、归还或遗失
+    private Integer quantity; // 本次取得的数量；同种装备允许有多条记录
+    private String aiText; // 由AI生成的装备来源
+    private Long acquiredTurnNumber; // 本次实际取得装备时的总回合编号
+    private String status; // 当前使用OWNED表示背包内持有
 }
