@@ -5,7 +5,6 @@ import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
-import mvp.ai.ClasspathJsonLoader;
 import mvp.ai.FreeActionWorkflow;
 import mvp.engine.CharacterEngine.CharacterState;
 import mvp.engine.CharacterEngine.DriverResult;
@@ -33,6 +32,7 @@ import mvp.service.ExamRecordService;
 import mvp.service.FamilyBackgroundService;
 import mvp.service.GameSaveService;
 import mvp.service.RegionService;
+import mvp.utils.ClasspathJsonLoader;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -40,6 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -348,34 +349,107 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         return result;
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
-    @Transactional
+    public ExamRecord prepareExamThought(String saveId, String examId) {
+        ExamAttempt before = prepareExamAttempt(saveId, null, examId);
+        String thought = examRecordService.generateThought(before.exam(), before.characterContext());
+        return new TransactionTemplate(transactionManager).execute(status -> {
+            ActorContext context = loadPlayer(saveId, true);
+            return examRecordService.saveThought(context.save(), context.character().getId(), before.exam(), thought);
+        });
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public ExamResult completeAutoExam(String saveId, String examId) {
         return completeCharacterExam(saveId, null, examId);
     }
 
     /** {@inheritDoc} */
     @Override
-    @Transactional
     public ExamResult completeCharacterExam(String saveId, String actorId, String examId) {
-        ActorContext context = loadActor(saveId, actorId, true);
-        ExamRecordService.AutoExamSettlement settlement = examRecordService.settleAuto(
-                context.save(), context.character().getId(), examId
-        );
+        ExamAttempt before = prepareExamAttempt(saveId, actorId, examId);
+        ExamRecordService.ExamResolution resolution = examRecordService.resolveAuto(before.exam(), before.characterContext());
+        return new TransactionTemplate(transactionManager).execute(status -> {
+            ActorContext context = loadActor(saveId, actorId, true);
+            ExamRecordService.ExamSettlement settlement = examRecordService.settleResolved(
+                    context.save(), context.character().getId(), before.exam(), resolution);
+            return finishExam(context, settlement);
+        });
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public JSONObject completePlayerExam(String saveId, String examId, PlayerExamCommand command) {
+        if (command == null || command.text() == null || command.text().isBlank() || command.text().length() > 8000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请提交1至8000字符的答案");
+        }
+        JSONObject payload = new JSONObject().set("operation", "EXAM_PLAYER").set("examId", examId).set("command", command);
+        JSONObject previous = eventRecordService.replay(saveId, command.requestId(), payload);
+        if (previous != null) {
+            return previous;
+        }
+        ExamAttempt before = prepareExamAttempt(saveId, null, examId);
+        ExamRecordService.ExamResolution resolution = examRecordService.resolvePlayer(
+                before.exam(), command.text(), before.characterContext());
+        return new TransactionTemplate(transactionManager).execute(status -> {
+            ActorContext context = loadPlayer(saveId, true);
+            JSONObject replayed = eventRecordService.replay(saveId, command.requestId(), payload);
+            if (replayed != null) {
+                return replayed;
+            }
+            ExamRecordService.ExamSettlement settlement = examRecordService.settleResolved(
+                    context.save(), context.character().getId(), before.exam(), resolution);
+            JSONObject result = JSONUtil.parseObj(finishExam(context, settlement));
+            eventRecordService.recordOperation(saveId, context.character().getId(), command.requestId(), payload,
+                    "EXAM_PLAYER", context.save().getTotalTurnNumber(), result);
+            return result;
+        });
+    }
+
+    /** 短事务内取得一致的考试与人物事实；返回后才允许发起模型请求。 */
+    private ExamAttempt prepareExamAttempt(String saveId, String actorId, String examId) {
+        return new TransactionTemplate(transactionManager).execute(status -> {
+            ActorContext context = loadActor(saveId, actorId, true);
+            ExamRecord exam = examRecordService.loadForCharacter(context.save(), context.character().getId(), examId);
+            if (!"READY".equals(exam.getStatus())) {
+                return new ExamAttempt(exam, "{}");
+            }
+            CharacterState character = characterState(context.character());
+            ScholarState scholar = scholarState(context.scholar());
+            List<JSONObject> learnedBooks = bookService.listLibrary(context.save(), context.character().getId(), character, scholar)
+                    .stream().filter(book -> book.currentProgress() > 0)
+                    .map(book -> new JSONObject().set("bookName", book.bookName())
+                            .set("currentProgress", book.currentProgress()).set("requiredProgress", book.requiredProgress())
+                            .set("completed", book.completed()).set("knowledgeSummary", book.knowledgeSummary()))
+                    .toList();
+            String facts = new JSONObject().set("characterName", context.character().getName())
+                    .set("currentYear", context.save().getCurrentYear())
+                    .set("age", context.save().getCurrentYear() - LocalDate.parse(context.character().getBirthday()).getYear())
+                    .set("character", character).set("scholar", scholar).set("learnedBooks", learnedBooks).toString();
+            return new ExamAttempt(exam, facts);
+        });
+    }
+
+    /** 两种作答方式共用阶段切换、领域活跃记录及重病恢复，只在首次结算时执行。 */
+    private ExamResult finishExam(ActorContext context, ExamRecordService.ExamSettlement settlement) {
         ExamRecord exam = settlement.exam();
         String feedback = renderFeedback(
                 "COMPLETED_PASS".equals(exam.getStatus()) ? "TEXT_EXAM_PASS" : "TEXT_EXAM_FAIL", Map.of()
         );
         if (settlement.newlySettled()) {
-            applyTurnState(context.save(), turnEngine.completeExam(turnState(context.save()), exam.getExamType()));
-            updateById(context.save());
+            boolean playerExam = context.character().getType() == PLAYER_CHARACTER_TYPE;
+            if (playerExam) {
+                applyTurnState(context.save(), turnEngine.completeExam(turnState(context.save()), exam.getExamType()));
+                updateById(context.save());
+            }
             context.scholar().setLastActiveTurnNumber(context.save().getTotalTurnNumber());
             careerProfileShushengService.updateById(context.scholar());
             recordMilestone(context, exam.getExamType() + "_RESULT", feedback, Map.of("exam", exam));
-            advanceIllness(context);
+            if (playerExam) {
+                advanceIllness(context);
+            }
         }
         return new ExamResult(buildDetail(context), exam, settlement.newlySettled(), feedback);
     }
@@ -581,13 +655,23 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         if (!scene.getJSONArray("availableActionCode").contains("FREE_ACTION")) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "当前场景不能自由行动或对话");
         }
-        String facts = new JSONObject().set("actor", context.character()).set("scene", scene)
+        CharacterState character = characterState(context.character());
+        ScholarState scholar = scholarState(context.scholar());
+        int actorAge = context.save().getCurrentYear() - LocalDate.parse(context.character().getBirthday()).getYear();
+        JSONObject calendar = new JSONObject().set("currentYear", context.save().getCurrentYear())
+                .set("currentMonth", context.save().getCurrentMonth()).set("turnInMonth", context.save().getTurnInMonth())
+                .set("totalTurnNumber", context.save().getTotalTurnNumber());
+        String facts = new JSONObject().set("calendar", calendar)
+                .set("actor", context.character()).set("actorAge", actorAge).set("scholar", scholar)
+                .set("playerFamilyBackground", familyBackgroundService.lambdaQuery()
+                        .eq(FamilyBackground::getSaveId, saveId).one())
+                .set("scene", scene)
                 .set("books", bookService.listLibrary(context.save(), context.character().getId(),
-                        characterState(context.character()), scholarState(context.scholar())))
+                        character, scholar))
                 .set("npcs", characterService.lambdaQuery().eq(Character::getSaveId, saveId)
                         .eq(Character::getType, 0).eq(Character::getEnabled, true).list()).toString();
         return new ActionContext(saveId, context.character().getId(), context.save().getTotalTurnNumber(), sceneCode,
-                characterState(context.character()), scholarState(context.scholar()), facts);
+                character, scholar, facts);
     }
 
     /** {@inheritDoc} */
@@ -607,7 +691,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
             throw new ResponseStatusException(HttpStatus.CONFLICT, "回合已变化，请读档后重试");
         }
         FreeActionWorkflow.FreeActionResult resolved = freeActionWorkflow.execute(
-                new FreeActionWorkflow.FreeActionCommand(command.text(), command.sceneCode(), before.contextSummary(),
+                new FreeActionWorkflow.FreeActionCommand(command.text(), before.contextSummary(),
                         before.character(), before.scholar()));
         return new TransactionTemplate(transactionManager).execute(status -> settleAiAction(before, command.requestId(),
                 payload, resolved.settlement(), resolved.acquisitions(), true, resolved.eventSummary(), resolved.lifeMilestone()));
@@ -631,6 +715,9 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         }
         List<JSONObject> trades = new ArrayList<>();
         List<AcquisitionIntent> intents = acquisitions == null ? List.of() : acquisitions;
+        if (intents.stream().anyMatch(Objects::isNull)) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI返回的物品获取列表包含无效内容，请重新发起");
+        }
         for (int i = 0; i < intents.size(); i++) {
             AcquisitionIntent intent = intents.get(i);
             trades.add(equipmentRecordService.acquire(before.saveId(), before.actorId(),
@@ -730,15 +817,17 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
     }
 
     /**
-     * 使用该回合全部结算后的属性与学识建立考试快照。
+     * 共享时间到达考试节点时，用玩家当前属性与学识建立快照，不取最后行动的NPC。
      *
-     * @param context 已保存本回合结果的上下文
+     * @param context 已保存行动结果和共享时间的当前行动者上下文
      * @param turn 时间引擎返回的推进及考试触发结果
      */
     private void prepareTriggeredExam(ActorContext context, TurnEngine.TurnResult turn) {
         if (turn.triggeredExamType() != null) {
-            examRecordService.prepare(context.save(), context.character().getId(), characterState(context.character()),
-                    scholarState(context.scholar()), bookService.totalKnowledge(context.character().getId()));
+            ActorContext player = context.character().getType() == PLAYER_CHARACTER_TYPE
+                    ? context : loadPlayer(context.save().getId(), false);
+            examRecordService.prepare(context.save(), player.character().getId(), characterState(player.character()),
+                    scholarState(player.scholar()), bookService.totalKnowledge(player.character().getId()));
         }
     }
 
@@ -749,6 +838,9 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         ActorContext context = loadPlayer(saveId, true);
         bookService.importDefinitions();
         createNpcs(context.save(), context.character(), characterEngine.startLife(context.character().getBirthRegionId()).scholar());
+    }
+
+    private record ExamAttempt(ExamRecord exam, String characterContext) {
     }
 
     private record ActorContext(GameSave save, Character character, CareerProfileShusheng scholar) {

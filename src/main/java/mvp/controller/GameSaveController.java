@@ -37,7 +37,7 @@ public class GameSaveController {
     /**
      * 返回开始人生页面允许选择的出生地区。
      *
-     * @return 惠州下启用的县级地区
+     * @return 惠州下启用的出生地区
      */
     @GetMapping("/birth-regions")
     public List<Region> listBirthRegions() {

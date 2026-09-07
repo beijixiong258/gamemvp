@@ -9,11 +9,18 @@ import mvp.service.EventRecordService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
 
 @Service
 public class EventRecordServiceImpl extends ServiceImpl<EventRecordMapper, EventRecord> implements EventRecordService {
+    private final JsonMapper jsonMapper;
+
+    public EventRecordServiceImpl(JsonMapper jsonMapper) {
+        this.jsonMapper = jsonMapper;
+    }
+
     /** {@inheritDoc} */
     @Override
     public JSONObject replay(String saveId, String requestId, Object payload) {
@@ -39,7 +46,7 @@ public class EventRecordServiceImpl extends ServiceImpl<EventRecordMapper, Event
                 .setRequestPayloadJson(JSONUtil.toJsonStr(payload)).setEventCode(code)
                 .setEventSummary("已执行：" + code)
                 .setRelatedCharacterIdJson(JSONUtil.toJsonStr(List.of(actorId)))
-                .setOccurredTurnNumber(turnNumber).setSettlementResultJson(JSONUtil.toJsonStr(result))
+                .setOccurredTurnNumber(turnNumber).setSettlementResultJson(jsonMapper.writeValueAsString(result))
                 .setLifeMilestone(false));
     }
 }

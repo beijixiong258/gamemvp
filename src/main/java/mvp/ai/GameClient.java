@@ -1,5 +1,6 @@
 package mvp.ai;
 
+import mvp.utils.ClasspathJsonLoader;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -29,23 +30,22 @@ public class GameClient {
     }
 
     /**
-     * 按提示词编码执行一次结构化模型调用，供LangGraph节点中的Resolver复用。
+     * 按提示词编码执行一次结构化模型调用，供自由行动、对话和考试服务复用。
      *
      * @param promptCode prompt.json中的提示词编码
      * @param userText 本次任务的动态输入和游戏上下文
      * @param type 期望模型映射成的结构化结果类型
-     * @param tools 本次调用允许模型使用的工具，可为空
      * @param <T> 结构化结果类型
      * @return 模型响应映射后的结构化结果
      */
-    public <T> T chat(String promptCode, String userText, Class<T> type, Object... tools) {
+    public <T> T chat(String promptCode, String userText, Class<T> type) {
         PromptDefinition definition = getPrompt(promptCode);
         Prompt prompt = new Prompt(
                 new SystemMessage(definition.systemText()),
                 new UserMessage(userText)
         );
         try {
-            T result = chatClient.prompt(prompt).tools(tools).call().entity(type);
+            T result = chatClient.prompt(prompt).call().entity(type);
             if (result == null) {
                 throw new IllegalStateException("模型未返回有效内容");
             }
@@ -69,7 +69,6 @@ public class GameClient {
 
     private record PromptDefinition(
             String promptCode,
-            String taskType,
             String systemText
     ) {
     }

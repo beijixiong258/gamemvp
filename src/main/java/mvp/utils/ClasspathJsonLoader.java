@@ -1,4 +1,4 @@
-package mvp.ai;
+package mvp.utils;
 
 import cn.hutool.core.io.resource.ResourceUtil;
 import cn.hutool.json.JSONUtil;

@@ -6,7 +6,6 @@ import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
-import mvp.ai.ClasspathJsonLoader;
 import mvp.ai.FreeActionResolver;
 import mvp.engine.CharacterEngine;
 import mvp.entity.Character;
@@ -19,6 +18,7 @@ import mvp.service.DialogueRecordService;
 import mvp.service.EquipmentRecordService.AcquisitionIntent;
 import mvp.service.EventRecordService;
 import mvp.service.GameSaveService;
+import mvp.utils.ClasspathJsonLoader;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -98,7 +98,7 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
         if (counterpart == null || !Boolean.TRUE.equals(counterpart.getEnabled())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "对话对象已不可用");
         }
-        String input = new JSONObject().set("facts", snapshot.contextSummary()).set("counterpart", counterpart)
+        String input = new JSONObject().set("facts", JSONUtil.parseObj(snapshot.contextSummary())).set("counterpart", counterpart)
                 .set("history", JSONUtil.parseArray(before.getMessagesJson())).set("currentText", command.text())
                 .set("manualEnd", command.endDialogue()).toString();
         FreeActionResolver.DialogueResolution resolution = resolver.resolveDialogue(input);

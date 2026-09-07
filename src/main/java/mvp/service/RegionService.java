@@ -7,9 +7,9 @@ import mvp.entity.Region;
 public interface RegionService extends IService<Region> {
 
     /**
-     * 查询MVP出生页可展示的惠州非城区县级节点。
+     * 查询MVP出生页可展示的惠州直属子节点，当前为博罗和海丰。
      *
-     * @return 按同级顺序排列的出生地区列表
+     * @return 启用的出生地区列表，不指定显示顺序
      */
     List<Region> listMvpBirthRegions();
 }

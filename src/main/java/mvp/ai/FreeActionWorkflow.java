@@ -39,13 +39,12 @@ public class FreeActionWorkflow {
     /**
      * 执行一次自由行动智能体流程。
      *
-     * @param command 玩家原文、上下文及行动前数值快照
+     * @param command 玩家原文、完整事实JSON及引擎使用的行动前数值快照
      * @return AI事件语义与Java引擎确定的结算结果
      */
     public FreeActionResult execute(FreeActionCommand command) {
         Map<String, Object> input = new HashMap<>();
         input.put(FreeActionState.PLAYER_TEXT, command.playerText());
-        input.put(FreeActionState.SCENE_CODE, command.sceneCode());
         input.put(
                 FreeActionState.CONTEXT_SUMMARY,
                 command.contextSummary() == null ? "" : command.contextSummary()
@@ -98,10 +97,7 @@ public class FreeActionWorkflow {
     private Map<String, Object> resolveAction(FreeActionState state) {
         FreeActionResolver.FreeActionResolution resolution = resolver.resolve(
                 state.playerText(),
-                state.sceneCode(),
-                state.contextSummary(),
-                state.character(),
-                state.scholar()
+                state.contextSummary()
         );
         return Map.of(FreeActionState.RESOLUTION, resolution);
     }
@@ -123,7 +119,6 @@ public class FreeActionWorkflow {
 
     public record FreeActionCommand(
             String playerText,
-            String sceneCode,
             String contextSummary,
             CharacterState character,
             ScholarState scholar

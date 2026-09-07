@@ -25,7 +25,7 @@ public interface GameSaveService extends IService<GameSave> {
     /**
      * 查询开始人生页面允许选择的出生地区。
      *
-     * @return 按显示顺序排列的惠州县级地区
+     * @return 惠州下启用的出生地区，当前为博罗和海丰
      */
     List<Region> listBirthRegions();
 
@@ -63,13 +63,22 @@ public interface GameSaveService extends IService<GameSave> {
     JSONObject executeFixedAction(String saveId, FixedActionCommand command);
 
     /**
-     * 按考试快照完成系统代行，阶段考试恢复求学，县试结束本局。
+     * 按考试快照计分并生成系统代行答卷与总结，阶段考试恢复求学，县试结束本局。
      *
      * @param saveId 存档ID
      * @param examId 已触发的考试记录ID
      * @return 成绩、更新后的存档及是否为首次结算
      */
     ExamResult completeAutoExam(String saveId, String examId);
+
+    /** 获取或生成当前玩家考试的思维提示，缓存至考试记录，不计分或推进回合。 */
+    ExamRecord prepareExamThought(String saveId, String examId);
+
+    /**
+     * 评价玩家答案、由引擎计分并保存考试；相同requestId和原文返回原响应。
+     * 答案不超过8000字符，内容修正最多正负10分，失败不保存部分结果。
+     */
+    JSONObject completePlayerExam(String saveId, String examId, PlayerExamCommand command);
 
     /**
      * 查询存档入口列表，不读取完整人生事件。
@@ -96,7 +105,7 @@ public interface GameSaveService extends IService<GameSave> {
     JSONObject executeCharacterAction(String saveId, String actorId, FixedActionCommand command);
 
     /**
-     * 使用指定人物的考试快照完成系统代行。
+     * 使用指定人物的考试快照完成系统代行；只有玩家考试可以切换存档阶段或结束本局。
      *
      * @param saveId 存档ID
      * @param actorId 应考人物ID，空时使用玩家
@@ -106,12 +115,12 @@ public interface GameSaveService extends IService<GameSave> {
     ExamResult completeCharacterExam(String saveId, String actorId, String examId);
 
     /**
-     * 为自由行动或对话读取可交给模型的当前事实。
+     * 为自由行动或对话读取日期、行动者年龄与能力、玩家初始家庭背景及场景事实。
      *
      * @param saveId 存档ID
      * @param actorId 玩家或NPC的ID
      * @param sceneCode 当前行动场景
-     * @return 模型调用前的只读快照
+     * @return 模型调用前的只读数值快照和事实JSON，家庭背景不代表NPC背景或人物钱包
      */
     ActionContext prepareAction(String saveId, String actorId, String sceneCode);
 
@@ -191,6 +200,9 @@ public interface GameSaveService extends IService<GameSave> {
     }
 
     record ExamResult(SaveDetail detail, ExamRecord exam, boolean newlySettled, String feedback) {
+    }
+
+    record PlayerExamCommand(String requestId, String text) {
     }
 
     record FreeActionCommand(String requestId, String sceneCode, String text, Long expectedTurnNumber) {

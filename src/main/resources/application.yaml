@@ -7,7 +7,7 @@ spring:
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3307/mvp?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    url: jdbc:mysql://localhost:3306/mvp?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
     username: root
     password: "030206"
 
@@ -23,6 +23,9 @@ spring:
           model: mimo-v2.5
           temperature: 0.2
           max-completion-tokens: 3000
+          extra-body:
+            thinking:
+              type: disabled
 
 mybatis-plus:
   configuration:

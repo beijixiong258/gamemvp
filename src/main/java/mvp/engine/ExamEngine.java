@@ -1,6 +1,6 @@
 package mvp.engine;
 
-import mvp.utils.Caculator;
+import mvp.utils.Calculator;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -45,8 +45,8 @@ public class ExamEngine {
      * @return 0到100的考试知识分
      */
     public int knowledgeScore(BigDecimal knowledgeTotal) {
-        return Caculator.clamp(0, 100, Caculator.roundToInt(
-                Caculator.divide(knowledgeTotal, GameRuleConstant.KNOWLEDGE_PER_EXAM_POINT)));
+        return Calculator.clamp(0, 100, Calculator.roundToInt(
+                Calculator.divide(knowledgeTotal, GameRuleConstant.KNOWLEDGE_PER_EXAM_POINT)));
     }
 
     /**
@@ -59,9 +59,9 @@ public class ExamEngine {
         if (diceRoll < 1 || diceRoll > 100) {
             throw new IllegalArgumentException("骰点必须在1至100之间");
         }
-        BigDecimal position = BigDecimal.valueOf(diceRoll).subtract(Caculator.decimal("50.5"))
-                .divide(Caculator.decimal("49.5"), 8, RoundingMode.HALF_UP);
-        return Caculator.roundToInt(position.pow(3).multiply(
+        BigDecimal position = BigDecimal.valueOf(diceRoll).subtract(Calculator.decimal("50.5"))
+                .divide(Calculator.decimal("49.5"), 8, RoundingMode.HALF_UP);
+        return Calculator.roundToInt(position.pow(3).multiply(
                 BigDecimal.valueOf(GameRuleConstant.EXAM_LUCK_AMPLITUDE)));
     }
 
@@ -91,7 +91,7 @@ public class ExamEngine {
                 .add(BigDecimal.valueOf(scholar.abilityCelun()).multiply(weights.abilityCelun()))
                 .add(BigDecimal.valueOf(scholar.abilityWenxue()).multiply(weights.abilityWenxue()))
                 .add(BigDecimal.valueOf(knowledgeScore).multiply(weights.knowledge()));
-        return Caculator.clamp(0, 100, Caculator.roundToInt(score));
+        return Calculator.clamp(0, 100, Calculator.roundToInt(score));
     }
 
     /**
@@ -102,17 +102,17 @@ public class ExamEngine {
      */
     public int stateOffset(CharacterEngine.CharacterState character) {
         BigDecimal healthModifier = BigDecimal.valueOf(character.characterJiankang() - 70L)
-                .multiply(Caculator.decimal("0.06"));
+                .multiply(Calculator.decimal("0.06"));
         BigDecimal fatigueModifier = BigDecimal.valueOf(-Math.max(0, character.characterPilao() - 20L))
-                .multiply(Caculator.decimal("0.08"));
+                .multiply(Calculator.decimal("0.08"));
         BigDecimal fitnessModifier = BigDecimal.valueOf(character.characterTineng() - 50L)
-                .multiply(Caculator.decimal("0.03"));
-        BigDecimal result = Caculator.clamp(
-                Caculator.decimal("-8"),
-                Caculator.decimal("4"),
+                .multiply(Calculator.decimal("0.03"));
+        BigDecimal result = Calculator.clamp(
+                Calculator.decimal("-8"),
+                Calculator.decimal("4"),
                 healthModifier.add(fatigueModifier).add(fitnessModifier)
         );
-        return Caculator.roundToInt(result);
+        return Calculator.roundToInt(result);
     }
 
     /**
@@ -145,7 +145,7 @@ public class ExamEngine {
      * @return 最终成绩与通过状态
      */
     public ExamResult settleAuto(int baseAbilityScore, int stateOffset, int diceRoll, int luckOffset, int passThreshold) {
-        int finalScore = Caculator.clamp(0, 100, baseAbilityScore + stateOffset + luckOffset);
+        int finalScore = Calculator.clamp(0, 100, baseAbilityScore + stateOffset + luckOffset);
         return result(finalScore, 0, diceRoll, passThreshold);
     }
 
@@ -154,7 +154,7 @@ public class ExamEngine {
      *
      * @param baseAbilityScore 基础能力分
      * @param stateOffset 临场状态偏移
-     * @param contentModifier 答案评价Resolver给出的内容修正
+     * @param contentModifier AI给出的答案内容修正，先限制在-10至10，再取整
      * @param diceRoll 考试开始时保存的骰点，不能在重传时重投
      * @param luckOffset 考试准备时已保存的普通骰点修正
      * @param passThreshold 当前考试通过线
@@ -168,12 +168,10 @@ public class ExamEngine {
             int luckOffset,
             int passThreshold
     ) {
-        int effectiveContentModifier = Caculator.clamp(
-                -25,
-                25,
-                contentModifier.setScale(0, RoundingMode.HALF_UP).intValue()
-        );
-        int finalScore = Caculator.clamp(
+        int effectiveContentModifier = Calculator.clamp(
+                BigDecimal.valueOf(-10), BigDecimal.TEN, contentModifier
+        ).setScale(0, RoundingMode.HALF_UP).intValue();
+        int finalScore = Calculator.clamp(
                 0,
                 100,
                 baseAbilityScore + stateOffset + effectiveContentModifier + luckOffset

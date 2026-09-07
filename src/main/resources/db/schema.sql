@@ -1,6 +1,10 @@
 -- 古代穿越人生模拟游戏 MVP 数据库结构
 -- 适用版本：MySQL 8.0+
--- 本脚本负责建库、建表、约束和MVP地区基础数据。
+-- 连接本机共享MySQL：localhost:3306，目标数据库固定为mvp。
+-- 本脚本负责建库、建表、约束和MVP地区基础数据，不创建MySQL实例。
+-- SQL文件按UTF-8读取；显式设置连接字符集，避免中文名称和注释被错误解码。
+
+SET NAMES utf8mb4;
 
 CREATE DATABASE IF NOT EXISTS `mvp`
     DEFAULT CHARACTER SET utf8mb4
@@ -8,67 +12,52 @@ CREATE DATABASE IF NOT EXISTS `mvp`
 
 USE `mvp`;
 
-CREATE TABLE IF NOT EXISTS `region_definition`
+CREATE TABLE IF NOT EXISTS `region`
 (
-    `id`               CHAR(32)    NOT NULL COMMENT '地区ID',
-    `parent_id`        CHAR(32)    NULL COMMENT '上级行政区ID，根节点为空',
-    `region_code`      VARCHAR(64) NOT NULL COMMENT '稳定地区编码',
-    `region_name`      VARCHAR(64) NOT NULL COMMENT '地区显示名称',
-    `region_level`     VARCHAR(32) NOT NULL COMMENT '行政区等级：PROVINCE、CITY、COUNTY',
-    `enabled`          TINYINT(1)  NOT NULL DEFAULT 1 COMMENT '是否启用',
-    `sort_order`       INT         NOT NULL DEFAULT 0 COMMENT '同级显示顺序',
+    `id`          CHAR(32)    NOT NULL COMMENT '地区ID',
+    `parent_id`   CHAR(32)    NULL COMMENT '上级行政区ID，根节点为空',
+    `region_name` VARCHAR(64) NOT NULL COMMENT '地区显示名称',
+    `enabled`     TINYINT(1)  NOT NULL DEFAULT 1 COMMENT '是否启用',
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_region_definition_code` (`region_code`),
-    KEY `idx_region_definition_parent_sort` (`parent_id`, `sort_order`),
-    CONSTRAINT `fk_region_definition_parent`
-        FOREIGN KEY (`parent_id`) REFERENCES `region_definition` (`id`)
+    KEY `idx_region_parent` (`parent_id`),
+    CONSTRAINT `fk_region_parent`
+        FOREIGN KEY (`parent_id`) REFERENCES `region` (`id`)
             ON UPDATE RESTRICT ON DELETE RESTRICT,
-    CONSTRAINT `chk_region_definition_level`
-        CHECK (`region_level` IN ('PROVINCE', 'CITY', 'COUNTY')),
-    CONSTRAINT `chk_region_definition_enabled`
+    CONSTRAINT `chk_region_enabled`
         CHECK (`enabled` IN (0, 1))
 ) ENGINE = InnoDB
   DEFAULT CHARACTER SET = utf8mb4
   COLLATE = utf8mb4_unicode_ci
   COMMENT = '行政区划树';
 
-INSERT INTO `region_definition`
-    (`id`, `parent_id`, `region_code`, `region_name`, `region_level`, `enabled`, `sort_order`)
+INSERT INTO `region` (`id`, `parent_id`, `region_name`, `enabled`)
 VALUES
-    ('00000000000000000000000000000001', NULL, 'REGION_GUANGDONG', '广东省', 'PROVINCE', 1, 1)
+    ('00000000000000000000000000000001', NULL, '广东省', 1)
 ON DUPLICATE KEY UPDATE
     `parent_id` = VALUES(`parent_id`),
     `region_name` = VALUES(`region_name`),
-    `region_level` = VALUES(`region_level`),
-    `enabled` = VALUES(`enabled`),
-    `sort_order` = VALUES(`sort_order`);
+    `enabled` = VALUES(`enabled`);
 
-INSERT INTO `region_definition`
-    (`id`, `parent_id`, `region_code`, `region_name`, `region_level`, `enabled`, `sort_order`)
+INSERT INTO `region` (`id`, `parent_id`, `region_name`, `enabled`)
 VALUES
-    ('00000000000000000000000000000002', '00000000000000000000000000000001', 'REGION_GUANGZHOU', '广州', 'CITY', 1, 1),
-    ('00000000000000000000000000000003', '00000000000000000000000000000001', 'REGION_HUIZHOU', '惠州', 'CITY', 1, 2)
+    ('00000000000000000000000000000002', '00000000000000000000000000000001', '广州', 1),
+    ('00000000000000000000000000000003', '00000000000000000000000000000001', '惠州', 1)
 ON DUPLICATE KEY UPDATE
     `parent_id` = VALUES(`parent_id`),
     `region_name` = VALUES(`region_name`),
-    `region_level` = VALUES(`region_level`),
-    `enabled` = VALUES(`enabled`),
-    `sort_order` = VALUES(`sort_order`);
+    `enabled` = VALUES(`enabled`);
 
-INSERT INTO `region_definition`
-    (`id`, `parent_id`, `region_code`, `region_name`, `region_level`, `enabled`, `sort_order`)
+INSERT INTO `region` (`id`, `parent_id`, `region_name`, `enabled`)
 VALUES
-    ('00000000000000000000000000000004', '00000000000000000000000000000002', 'REGION_PANYU', '番禺县', 'COUNTY', 1, 1),
-    ('00000000000000000000000000000005', '00000000000000000000000000000002', 'REGION_NANHAI', '南海县', 'COUNTY', 1, 2),
-    ('00000000000000000000000000000006', '00000000000000000000000000000002', 'REGION_SHUNDE', '顺德县', 'COUNTY', 1, 3),
-    ('00000000000000000000000000000007', '00000000000000000000000000000003', 'REGION_BOLUO', '博罗县', 'COUNTY', 1, 1),
-    ('00000000000000000000000000000008', '00000000000000000000000000000003', 'REGION_HAIFENG', '海丰县', 'COUNTY', 1, 2)
+    ('00000000000000000000000000000004', '00000000000000000000000000000002', '番禺县', 1),
+    ('00000000000000000000000000000005', '00000000000000000000000000000002', '南海县', 1),
+    ('00000000000000000000000000000006', '00000000000000000000000000000002', '顺德县', 1),
+    ('00000000000000000000000000000007', '00000000000000000000000000000003', '博罗县', 1),
+    ('00000000000000000000000000000008', '00000000000000000000000000000003', '海丰县', 1)
 ON DUPLICATE KEY UPDATE
     `parent_id` = VALUES(`parent_id`),
     `region_name` = VALUES(`region_name`),
-    `region_level` = VALUES(`region_level`),
-    `enabled` = VALUES(`enabled`),
-    `sort_order` = VALUES(`sort_order`);
+    `enabled` = VALUES(`enabled`);
 
 CREATE TABLE IF NOT EXISTS `game_save`
 (
@@ -133,10 +122,10 @@ CREATE TABLE IF NOT EXISTS `game_character`
         FOREIGN KEY (`save_id`) REFERENCES `game_save` (`id`)
             ON UPDATE RESTRICT ON DELETE CASCADE,
     CONSTRAINT `fk_game_character_birth_region`
-        FOREIGN KEY (`birth_region_id`) REFERENCES `region_definition` (`id`)
+        FOREIGN KEY (`birth_region_id`) REFERENCES `region` (`id`)
             ON UPDATE RESTRICT ON DELETE RESTRICT,
     CONSTRAINT `fk_game_character_current_region`
-        FOREIGN KEY (`current_region_id`) REFERENCES `region_definition` (`id`)
+        FOREIGN KEY (`current_region_id`) REFERENCES `region` (`id`)
             ON UPDATE RESTRICT ON DELETE RESTRICT,
     CONSTRAINT `chk_game_character_type`
         CHECK (`type` IN (0, 1)),

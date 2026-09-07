@@ -1,6 +1,9 @@
 -- 从旧版12表结构升级到背包、学识、对话版本。仅对尚未升级的旧库执行一次。
+-- 前提：书籍已有growth_domain_code，书生档案已使用id/character_id，不含旧character_career依赖。
+-- 不适用于混有character_career、career_shusheng_profile或family_state的更早结构。
 -- 不自动执行。MySQL DDL会隐式提交；请先确认当前字段与旧版schema一致。
 -- 不删除存档、阅读进度、旧摘要或旧借阅记录；旧BORROWED记录不进入新背包。
+SET NAMES utf8mb4;
 USE `mvp`;
 
 ALTER TABLE `game_save`
@@ -73,3 +76,23 @@ CREATE TABLE IF NOT EXISTS `dialogue_record`
             ON UPDATE RESTRICT ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci
   COMMENT = '人物对话及一次性结束结算状态';
+
+-- 地区树简化：保留原ID、父子关系、名称和启用状态，移除编码、等级和排序。
+-- 已完成前述业务表升级、但仍保留旧region_definition的库，只执行以下段落一次。
+-- region已经是四字段结构时不要重复执行；重命名会同步更新人物地区外键的目标表。
+RENAME TABLE `mvp`.`region_definition` TO `mvp`.`region`;
+
+ALTER TABLE `mvp`.`region`
+    DROP FOREIGN KEY `fk_region_definition_parent`,
+    DROP CHECK `chk_region_definition_level`,
+    DROP CHECK `chk_region_definition_enabled`,
+    DROP INDEX `uk_region_definition_code`,
+    DROP INDEX `idx_region_definition_parent_sort`,
+    DROP COLUMN `region_code`,
+    DROP COLUMN `region_level`,
+    DROP COLUMN `sort_order`,
+    ADD KEY `idx_region_parent` (`parent_id`),
+    ADD CONSTRAINT `fk_region_parent`
+        FOREIGN KEY (`parent_id`) REFERENCES `mvp`.`region` (`id`)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+    ADD CONSTRAINT `chk_region_enabled` CHECK (`enabled` IN (0, 1));

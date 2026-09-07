@@ -1,9 +1,9 @@
-name: mvp
+name: local
 
 services:
   mysql:
     image: mysql:8.0
-    container_name: mvp_shujuku
+    container_name: mysql
     restart: unless-stopped
 
     environment:
@@ -12,7 +12,7 @@ services:
       TZ: "Asia/Shanghai"
 
     ports:
-      - "127.0.0.1:3307:3306"
+      - "127.0.0.1:3306:3306"
 
     volumes:
       - mysql-data:/var/lib/mysql
@@ -28,5 +28,29 @@ services:
       retries: 20
       start_period: 20s
 
+  redis:
+    image: redis:7.4
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+# 复用现有持久化数据卷；卷名保留历史名称，不另建空卷。
 volumes:
   mysql-data:
+    external: true
+    name: jiluzhushou_shujuku_mysql-data
+  redis-data:
+    external: true
+    name: jiluzhushou_shujuku_redis-data

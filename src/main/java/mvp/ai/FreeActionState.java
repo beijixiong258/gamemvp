@@ -11,7 +11,6 @@ import java.util.Map;
 public final class FreeActionState extends AgentState {
 
     static final String PLAYER_TEXT = "playerText";
-    static final String SCENE_CODE = "sceneCode";
     static final String CONTEXT_SUMMARY = "contextSummary";
     static final String CHARACTER = "character";
     static final String SCHOLAR = "scholar";
@@ -24,10 +23,6 @@ public final class FreeActionState extends AgentState {
 
     String playerText() {
         return this.<String>value(PLAYER_TEXT).orElseThrow();
-    }
-
-    String sceneCode() {
-        return this.<String>value(SCENE_CODE).orElseThrow();
     }
 
     String contextSummary() {
