@@ -12,7 +12,7 @@ import java.util.List;
 public class RegionServiceImpl extends ServiceImpl<RegionMapper, Region> implements RegionService {
 
     // 与schema.sql中惠州节点的主键一致，出生范围只依赖父子关系。
-    private static final String HUIZHOU_REGION_ID = "00000000000000000000000000000003";
+    private static final String HUIZHOU_REGION_ID = "3";
 
     /**
      * {@inheritDoc}

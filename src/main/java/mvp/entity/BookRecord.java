@@ -20,6 +20,6 @@ public class BookRecord {
     private String equipmentId; // 对应的书籍装备定义ID
     private Integer currentProgress; // 当前阅读进度，新取得书籍时从0开始
     private Integer totalReadTurnNumber; // 累计用于阅读该书的回合数
-    private Boolean completed; // 当前进度是否已经达到该书要求的完成进度
+    private Boolean completed; // 当前进度是否已经达到统一读满进度100
     private Long lastReadTurnNumber; // 最后一次阅读该书时的总回合编号
 }

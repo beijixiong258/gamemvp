@@ -52,15 +52,33 @@ public interface BookService extends IService<Book> {
             ScholarState scholar, String bookCode, long settlementTurnNumber
     );
 
+    /** 核对已持有、阅读条件、以身入局开关及未读满状态，返回用于出题的书目快照。 */
+    LibraryBook requirePlayerReadingBook(GameSave save, String characterId, CharacterState character,
+                                        ScholarState scholar, String bookCode);
+
+    /** 在事务外按书籍内容和人物事实出一道体会题，不写入进度。 */
+    String generatePlayerReadingQuestion(LibraryBook book, String characterContext);
+
+    /** 在事务外评阅原题与玩家体会，由Java限幅并取整为0至100分。 */
+    PlayerReadingEvaluation evaluatePlayerReading(LibraryBook book, String question, String text);
+
+    /** 在外层存档事务中按评分结算，以身入局进度单次最多90点，不投骰。 */
+    BookActionResult readAsPlayer(GameSave save, String characterId, CharacterState character,
+                                 ScholarState scholar, String bookCode, long settlementTurnNumber, int score);
+
     record LibraryBook(
             String bookCode,
             String bookName,
             String equipmentId,
+            String rarityCode,
+            String rarityName,
+            String rarityColor,
             int currentProgress,
             int requiredProgress,
             int totalReadTurnNumber,
             boolean completed,
             boolean readable,
+            boolean playerReadingEnabled,
             List<String> blockedReasons,
             String knowledgeSummary,
             int ownedQuantity,
@@ -72,5 +90,8 @@ public interface BookService extends IService<Book> {
     }
 
     record BookActionResult(String bookName, CharacterEngine.ReadBookResult settlement) {
+    }
+
+    record PlayerReadingEvaluation(int score, String evaluation) {
     }
 }

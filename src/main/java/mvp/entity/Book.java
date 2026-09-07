@@ -18,9 +18,7 @@ public class Book {
     private String equipmentId; // 父装备定义ID，同时也是本表主键
     private String growthDomainCode; // 阅读收益所属领域，不作为人物身份限制
     private String readingRequirementJson; // 固定结构的阅读条件JSON
-    private Integer difficulty; // 书籍阅读难度
-    private Integer requiredProgress; // 完整读完该书所需的总进度
-    private Integer baseProgressPerTurn; // 不考虑人物修正时每回合增加的基础进度
+    private Boolean playerReadingEnabled = false; // 是否允许玩家以身入局读书，仅适用于科举类书籍
     private Integer abilityShiziWeight; // 识字能力收益权重百分比
     private Integer abilityJingyiWeight; // 经义能力收益权重百分比
     private Integer abilityWenzhangWeight; // 文章能力收益权重百分比

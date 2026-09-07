@@ -13,6 +13,10 @@ public final class GameRuleConstant {
     public static final int INITIAL_GENERAL_ATTRIBUTE = 20;
     public static final int INITIAL_LITERACY_ABILITY = 5;
     public static final int INITIAL_WALLET = 2_000;
+    public static final int BOOK_COMPLETION_PROGRESS = 100;
+    public static final int READING_PROGRESS_PER_TURN = 13;
+    public static final int PLAYER_READING_MIN_PROGRESS = 10;
+    public static final int PLAYER_READING_MAX_PROGRESS = 90;
     public static final int KNOWLEDGE_PER_EXAM_POINT = 2;
     public static final int EXAM_LUCK_AMPLITUDE = 25;
     public static final int SICK_TURNS = 4;

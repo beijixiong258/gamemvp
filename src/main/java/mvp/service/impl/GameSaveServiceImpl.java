@@ -56,6 +56,8 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
 
     private static final int PLAYER_CHARACTER_TYPE = 1;
     private static final String INITIAL_AVAILABLE_STAGE_JSON = "[\"STUDYING\"]";
+    private static final String BOOK_QUESTION_PREFIX = "BOOK_PLAYER_QUESTION/";
+    private static final String BOOK_ANSWER_PREFIX = "BOOK_PLAYER_ANSWER/";
 
     private final CharacterEngine characterEngine;
     private final TurnEngine turnEngine;
@@ -201,6 +203,156 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
                 context.save(), context.character().getId(),
                 characterState(context.character()), scholarState(context.scholar())
         );
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public JSONObject preparePlayerReading(String saveId, String bookCode, PlayerReadingQuestionCommand command) {
+        if (command == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "缺少出题参数");
+        }
+        PlayerReadingAttempt before = new TransactionTemplate(transactionManager).execute(status ->
+                playerReadingAttempt(loadPlayer(saveId, true), bookCode, command.sceneCode(), command.expectedTurnNumber()));
+        String questionId = BOOK_QUESTION_PREFIX + before.actorId() + "/" + before.book().equipmentId() + "/" + before.turnNumber();
+        JSONObject payload = new JSONObject().set("operation", "BOOK_PLAYER_QUESTION")
+                .set("bookCode", bookCode).set("actorId", before.actorId()).set("command", command);
+        JSONObject previous = eventRecordService.replay(saveId, questionId, payload);
+        if (previous != null) {
+            return previous;
+        }
+        String question = bookService.generatePlayerReadingQuestion(before.book(), before.characterContext());
+        return new TransactionTemplate(transactionManager).execute(status -> {
+            ActorContext context = loadPlayer(saveId, true);
+            JSONObject replayed = eventRecordService.replay(saveId, questionId, payload);
+            if (replayed != null) {
+                return replayed;
+            }
+            verifyPlayerReadingSnapshot(context, before);
+            JSONObject result = new JSONObject().set("questionId", questionId).set("actorId", before.actorId())
+                    .set("bookCode", bookCode).set("bookName", before.book().bookName())
+                    .set("sceneCode", before.sceneCode()).set("turnNumber", before.turnNumber())
+                    .set("currentProgress", before.book().currentProgress()).set("question", question);
+            eventRecordService.recordOperation(saveId, before.actorId(), questionId, payload,
+                    "BOOK_PLAYER_QUESTION", before.turnNumber(), result);
+            return result;
+        });
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public JSONObject completePlayerReading(String saveId, String bookCode, PlayerReadingAnswerCommand command) {
+        if (command == null || command.questionId() == null || !command.questionId().startsWith(BOOK_QUESTION_PREFIX)
+                || command.questionId().length() > 120 || command.text() == null || command.text().isBlank()
+                || command.text().length() > 8000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请提供有效的questionId和1至8000字符的读书体会");
+        }
+        PlayerReadingSubmission submission = new TransactionTemplate(transactionManager).execute(status -> {
+            ActorContext context = loadPlayer(saveId, true);
+            JSONObject question = loadPlayerReadingQuestion(context, bookCode, command.questionId());
+            String requestId = BOOK_ANSWER_PREFIX + command.questionId().substring(BOOK_QUESTION_PREFIX.length());
+            JSONObject payload = new JSONObject().set("operation", "BOOK_PLAYER_ANSWER")
+                    .set("bookCode", bookCode).set("command", command);
+            JSONObject previous = eventRecordService.replay(saveId, requestId, payload);
+            if (previous != null) {
+                return new PlayerReadingSubmission(null, question, payload, requestId, previous);
+            }
+            PlayerReadingAttempt before = playerReadingAttempt(context, bookCode, question.getStr("sceneCode"),
+                    question.getLong("turnNumber"));
+            if (!Objects.equals(before.book().currentProgress(), question.getInt("currentProgress"))) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "阅读进度已变化，请重新出题");
+            }
+            return new PlayerReadingSubmission(before, question, payload, requestId, null);
+        });
+        if (submission.previous() != null) {
+            return submission.previous();
+        }
+        PlayerReadingAttempt before = submission.attempt();
+        BookService.PlayerReadingEvaluation evaluation = bookService.evaluatePlayerReading(
+                before.book(), submission.question().getStr("question"), command.text());
+        return new TransactionTemplate(transactionManager).execute(status -> {
+            ActorContext context = loadPlayer(saveId, true);
+            JSONObject replayed = eventRecordService.replay(saveId, submission.requestId(), submission.payload());
+            if (replayed != null) {
+                return replayed;
+            }
+            verifyPlayerReadingSnapshot(context, before);
+            TurnEngine.TurnResult turn = turnEngine.advance(turnState(context.save()), true);
+            BookService.BookActionResult result = bookService.readAsPlayer(context.save(), before.actorId(),
+                    before.character(), before.scholar(), bookCode, turn.state().totalTurnNumber(), evaluation.score());
+            CharacterEngine.ReadBookResult reading = result.settlement();
+            applyCharacterState(context.character(), reading.character());
+            characterService.updateById(context.character());
+            applyScholarState(context.scholar(), reading.scholar());
+            context.scholar().setLastActiveTurnNumber(turn.state().totalTurnNumber());
+            careerProfileShushengService.updateById(context.scholar());
+            applyTurnState(context.save(), turn.state());
+            updateById(context.save());
+            if (reading.reachedMastered()) {
+                recordMilestone(context, "BOOK_MASTERED", "你已掌握《" + result.bookName() + "》。",
+                        Map.of("bookCode", bookCode, "currentProgress", reading.progress().currentProgress(),
+                                "progressGain", reading.progressGain(), "score", evaluation.score()));
+            }
+            markIllness(context);
+            prepareTriggeredExam(context, turn);
+            advanceIllness(context);
+            CharacterState after = characterState(context.character());
+            ActionChanges changes = new ActionChanges(reading.progressGain(), reading.abilityGain(),
+                    after.characterPilao() - before.character().characterPilao(),
+                    after.characterJiankang() - before.character().characterJiankang(), null);
+            JSONObject response = JSONUtil.parseObj(new ActionResult(buildDetail(context), changes,
+                    "你写下了对《" + result.bookName() + "》的体会，阅读进度增加" + reading.progressGain() + "。"))
+                    .set("questionId", command.questionId()).set("bookCode", bookCode)
+                    .set("score", evaluation.score()).set("evaluation", evaluation.evaluation());
+            eventRecordService.recordOperation(saveId, before.actorId(), submission.requestId(), submission.payload(),
+                    "BOOK_PLAYER_ANSWER", context.save().getTotalTurnNumber(), response);
+            return response;
+        });
+    }
+
+    /** 只读快照由短事务内的存档锁保护，模型调用不占用锁。 */
+    private PlayerReadingAttempt playerReadingAttempt(ActorContext context, String bookCode, String sceneCode,
+                                                       Long expectedTurnNumber) {
+        if (!"STUDYING".equals(context.save().getStatus()) || context.character().getCharacterJiankang() <= 0
+                || context.character().getSickTurnsRemaining() > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "请先完成考试或重病休养，再以身入局读书");
+        }
+        if (expectedTurnNumber == null || !Objects.equals(expectedTurnNumber, context.save().getTotalTurnNumber())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "回合已变化，请刷新存档后重新出题");
+        }
+        if (!actions.get("READ_BOOK_PLAYER").getJSONArray("availableSceneCode").contains(sceneCode)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前场景不能读书");
+        }
+        CharacterState character = characterState(context.character());
+        ScholarState scholar = scholarState(context.scholar());
+        LibraryBook book = bookService.requirePlayerReadingBook(context.save(), context.character().getId(),
+                character, scholar, bookCode);
+        String characterContext = new JSONObject().set("name", context.character().getName())
+                .set("age", context.save().getCurrentYear() - LocalDate.parse(context.character().getBirthday()).getYear())
+                .set("character", character).set("scholar", scholar).toString();
+        return new PlayerReadingAttempt(context.character().getId(), expectedTurnNumber, sceneCode,
+                character, scholar, book, characterContext);
+    }
+
+    private void verifyPlayerReadingSnapshot(ActorContext context, PlayerReadingAttempt before) {
+        PlayerReadingAttempt current = playerReadingAttempt(context, before.book().bookCode(), before.sceneCode(),
+                before.turnNumber());
+        if (!before.equals(current)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "人物或书籍状态已变化，本次AI结果未结算，请重试");
+        }
+    }
+
+    private JSONObject loadPlayerReadingQuestion(ActorContext context, String bookCode, String questionId) {
+        EventRecord record = eventRecordService.lambdaQuery().eq(EventRecord::getSaveId, context.save().getId())
+                .eq(EventRecord::getRequestId, questionId).eq(EventRecord::getEventCode, "BOOK_PLAYER_QUESTION").one();
+        if (record == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "读书题目不存在，请先出题");
+        }
+        JSONObject question = JSONUtil.parseObj(record.getSettlementResultJson());
+        if (!Objects.equals(bookCode, question.getStr("bookCode"))
+                || !Objects.equals(context.character().getId(), question.getStr("actorId"))) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "这道题不属于当前玩家或书籍");
+        }
+        return question;
     }
 
     /**
@@ -838,6 +990,14 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         ActorContext context = loadPlayer(saveId, true);
         bookService.importDefinitions();
         createNpcs(context.save(), context.character(), characterEngine.startLife(context.character().getBirthRegionId()).scholar());
+    }
+
+    private record PlayerReadingAttempt(String actorId, long turnNumber, String sceneCode, CharacterState character,
+                                        ScholarState scholar, LibraryBook book, String characterContext) {
+    }
+
+    private record PlayerReadingSubmission(PlayerReadingAttempt attempt, JSONObject question, JSONObject payload,
+                                           String requestId, JSONObject previous) {
     }
 
     private record ExamAttempt(ExamRecord exam, String characterContext) {

@@ -11,6 +11,15 @@
       "endTurn": true
     },
     {
+      "actionCode": "READ_BOOK_PLAYER",
+      "actionName": "以身入局读书",
+      "actionType": "BOOK_PLAYER_ACTION",
+      "availableSceneCode": ["SCENE_SISHU"],
+      "requiredParameter": ["bookCode", "questionId", "text"],
+      "engineRuleCode": "RULE_READ_BOOK_PLAYER",
+      "endTurn": true
+    },
+    {
       "actionCode": "PRACTICE_WRITING",
       "actionName": "练习文章",
       "actionType": "FIXED_ACTION",

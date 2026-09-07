@@ -20,6 +20,7 @@
       "description": "玩家读书、练习文章、参加阶段考试和向先生或同窗请教的场景。",
       "availableActionCode": [
         "READ_BOOK",
+        "READ_BOOK_PLAYER",
         "PRACTICE_WRITING",
         "FREE_ACTION",
         "NPC_DIALOGUE",

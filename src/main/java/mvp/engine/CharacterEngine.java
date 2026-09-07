@@ -7,6 +7,11 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
+import static mvp.engine.GameRuleConstant.BOOK_COMPLETION_PROGRESS;
+import static mvp.engine.GameRuleConstant.PLAYER_READING_MAX_PROGRESS;
+import static mvp.engine.GameRuleConstant.PLAYER_READING_MIN_PROGRESS;
+import static mvp.engine.GameRuleConstant.READING_PROGRESS_PER_TURN;
+
 /**
  * 人物成长数值引擎，根据人物快照和行动输入返回确定的结算结果，不访问数据库或模型。
  */
@@ -143,31 +148,47 @@ public class CharacterEngine {
             long settlementTurnNumber,
             int diceRoll
     ) {
-        BigDecimal readingFoundation = BigDecimal.valueOf(character.characterZhili())
-                .multiply(Calculator.decimal("0.40"))
-                .add(BigDecimal.valueOf(scholar.abilityShizi()).multiply(Calculator.decimal("0.60")));
-        BigDecimal difficultyFactor = Calculator.clamp(
-                Calculator.decimal("0.60"),
-                Calculator.decimal("1.20"),
-                Calculator.ONE.add(
-                        Calculator.divide(readingFoundation.subtract(BigDecimal.valueOf(book.difficulty())), 100)
-                )
-        );
-        BigDecimal studyAmount = BigDecimal.valueOf(book.baseProgressPerTurn())
-                .multiply(intelligenceFactor(character))
-                .multiply(conditionFactor(character))
-                .multiply(difficultyFactor);
+        BigDecimal studyAmount = readingStudyAmount(character);
 
-        int remainingProgress = Math.max(0, book.requiredProgress() - progress.currentProgress());
+        int remainingProgress = Math.max(0, BOOK_COMPLETION_PROGRESS - progress.currentProgress());
         int progressGain = Math.min(remainingProgress, Math.max(0, Calculator.roundToInt(studyAmount)));
         if (diceRoll == 1) {
             progressGain = 0;
         } else if (diceRoll == 100) {
             progressGain = remainingProgress;
         }
+        return settleReading(character, scholar, book, progress, settlementTurnNumber, studyAmount, progressGain, diceRoll);
+    }
+
+    /** 以身入局将0至100分线性换算为10至90点进度；能力和疲劳仍按一次普通读书计算。 */
+    public ReadBookResult readBookAsPlayer(
+            CharacterState character, ScholarState scholar, BookRule book, BookProgress progress,
+            long settlementTurnNumber, int score
+    ) {
+        int boundedScore = Calculator.clamp(0, 100, score);
+        int awardedProgress = PLAYER_READING_MIN_PROGRESS + Calculator.roundToInt(
+                Calculator.ratio(boundedScore)
+                        .multiply(BigDecimal.valueOf(PLAYER_READING_MAX_PROGRESS - PLAYER_READING_MIN_PROGRESS))
+        );
+        BigDecimal studyAmount = readingStudyAmount(character);
+        int remainingProgress = Math.max(0, BOOK_COMPLETION_PROGRESS - progress.currentProgress());
+        return settleReading(character, scholar, book, progress, settlementTurnNumber, studyAmount,
+                Math.min(remainingProgress, awardedProgress), null);
+    }
+
+    private BigDecimal readingStudyAmount(CharacterState character) {
+        return BigDecimal.valueOf(READING_PROGRESS_PER_TURN)
+                .multiply(intelligenceFactor(character))
+                .multiply(conditionFactor(character));
+    }
+
+    private ReadBookResult settleReading(
+            CharacterState character, ScholarState scholar, BookRule book, BookProgress progress,
+            long settlementTurnNumber, BigDecimal studyAmount, int progressGain, Integer diceRoll
+    ) {
         int progressAfter = Calculator.clamp(
                 0,
-                book.requiredProgress(),
+                BOOK_COMPLETION_PROGRESS,
                 progress.currentProgress() + progressGain
         );
 
@@ -179,14 +200,14 @@ public class CharacterEngine {
                         weightedAbility.divide(Calculator.decimal("120"), 8, RoundingMode.HALF_UP)
                 )
         );
-        BigDecimal reviewFactor = progress.currentProgress() >= book.requiredProgress()
+        BigDecimal reviewFactor = progress.currentProgress() >= BOOK_COMPLETION_PROGRESS
                 ? Calculator.decimal("0.35")
                 : Calculator.ONE;
         BigDecimal learningPool = Calculator.decimal("0.50")
                 .add(Calculator.decimal("0.20").multiply(studyAmount))
                 .multiply(diminishingFactor)
                 .multiply(reviewFactor);
-        if (diceRoll == 1) {
+        if (Integer.valueOf(1).equals(diceRoll)) {
             learningPool = BigDecimal.ZERO;
         }
 
@@ -204,7 +225,7 @@ public class CharacterEngine {
         BookProgress progressAfterState = new BookProgress(
                 progressAfter,
                 progress.totalReadTurnNumber() + 1,
-                progressAfter >= book.requiredProgress(),
+                progressAfter >= BOOK_COMPLETION_PROGRESS,
                 settlementTurnNumber
         );
         return new ReadBookResult(
@@ -216,8 +237,8 @@ public class CharacterEngine {
                 workCondition.fatigueGain(),
                 workCondition.exhaustionDamage(),
                 diceRoll,
-                progress.currentProgress() < book.requiredProgress()
-                        && progressAfter >= book.requiredProgress()
+                progress.currentProgress() < BOOK_COMPLETION_PROGRESS
+                        && progressAfter >= BOOK_COMPLETION_PROGRESS
         );
     }
 
@@ -418,7 +439,7 @@ public class CharacterEngine {
     private WorkCondition settleWorkCondition(CharacterState character, int baseFatigue) {
         int fatigueGain = fatigueGain(baseFatigue, character);
         int fatigueAfter = Calculator.clamp(0, 100, character.characterPilao() + fatigueGain);
-        int exhaustionDamage = exhaustionDamage(fatigueAfter);
+        int exhaustionDamage = fatigueGain > 0 ? exhaustionDamage(fatigueAfter) : 0;
         int healthAfter = Calculator.clamp(0, 100, character.characterJiankang() - exhaustionDamage);
         CharacterState characterAfter = new CharacterState(
                 character.characterZhili(),
@@ -451,7 +472,7 @@ public class CharacterEngine {
      * @return 学识贡献，最多四位小数，不在每次阅读时反复取整
      */
     public BigDecimal knowledgeContribution(int totalKnowledge, int progress) {
-        return progress >= 100 ? BigDecimal.valueOf(totalKnowledge)
+        return progress >= BOOK_COMPLETION_PROGRESS ? BigDecimal.valueOf(totalKnowledge)
                 : BigDecimal.valueOf(totalKnowledge).multiply(Calculator.decimal("0.006"))
                         .multiply(BigDecimal.valueOf(Math.max(0, progress)));
     }
@@ -545,9 +566,6 @@ public class CharacterEngine {
     }
 
     public record BookRule(
-            int difficulty,
-            int requiredProgress,
-            int baseProgressPerTurn,
             int abilityShiziWeight,
             int abilityJingyiWeight,
             int abilityWenzhangWeight,
@@ -573,7 +591,7 @@ public class CharacterEngine {
             ScholarState abilityGain,
             int fatigueGain,
             int exhaustionDamage,
-            int diceRoll,
+            Integer diceRoll,
             boolean reachedMastered
     ) {
     }

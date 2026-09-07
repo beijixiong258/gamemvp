@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS `region`
 
 INSERT INTO `region` (`id`, `parent_id`, `region_name`, `enabled`)
 VALUES
-    ('00000000000000000000000000000001', NULL, '广东省', 1)
+    ('1', NULL, '广东省', 1)
 ON DUPLICATE KEY UPDATE
     `parent_id` = VALUES(`parent_id`),
     `region_name` = VALUES(`region_name`),
@@ -40,8 +40,8 @@ ON DUPLICATE KEY UPDATE
 
 INSERT INTO `region` (`id`, `parent_id`, `region_name`, `enabled`)
 VALUES
-    ('00000000000000000000000000000002', '00000000000000000000000000000001', '广州', 1),
-    ('00000000000000000000000000000003', '00000000000000000000000000000001', '惠州', 1)
+    ('2', '1', '广州', 1),
+    ('3', '1', '惠州', 1)
 ON DUPLICATE KEY UPDATE
     `parent_id` = VALUES(`parent_id`),
     `region_name` = VALUES(`region_name`),
@@ -49,11 +49,11 @@ ON DUPLICATE KEY UPDATE
 
 INSERT INTO `region` (`id`, `parent_id`, `region_name`, `enabled`)
 VALUES
-    ('00000000000000000000000000000004', '00000000000000000000000000000002', '番禺县', 1),
-    ('00000000000000000000000000000005', '00000000000000000000000000000002', '南海县', 1),
-    ('00000000000000000000000000000006', '00000000000000000000000000000002', '顺德县', 1),
-    ('00000000000000000000000000000007', '00000000000000000000000000000003', '博罗县', 1),
-    ('00000000000000000000000000000008', '00000000000000000000000000000003', '海丰县', 1)
+    ('4', '2', '番禺县', 1),
+    ('5', '2', '南海县', 1),
+    ('6', '2', '顺德县', 1),
+    ('7', '3', '博罗县', 1),
+    ('8', '3', '海丰县', 1)
 ON DUPLICATE KEY UPDATE
     `parent_id` = VALUES(`parent_id`),
     `region_name` = VALUES(`region_name`),
@@ -195,7 +195,7 @@ CREATE TABLE IF NOT EXISTS `equipment_definition`
     `equipment_code` VARCHAR(64)  NOT NULL COMMENT '稳定装备编码',
     `equipment_name` VARCHAR(128) NOT NULL COMMENT '装备显示名称',
     `equipment_type` VARCHAR(32)  NOT NULL COMMENT '装备类型编码',
-    `rarity_code`    VARCHAR(32)  NOT NULL COMMENT '稀有度编码',
+    `rarity_code`    VARCHAR(32)  NOT NULL COMMENT '装备品质：COMMON白、UNCOMMON绿、RARE蓝、EPIC紫、LEGENDARY金',
     `price`          INT          NOT NULL COMMENT '价格，单位为文',
     `supplier_npc_code` VARCHAR(64) NOT NULL COMMENT '供应NPC模板编码',
     `description`    TEXT         NOT NULL COMMENT '基础介绍',
@@ -203,7 +203,9 @@ CREATE TABLE IF NOT EXISTS `equipment_definition`
     UNIQUE KEY `uk_equipment_definition_code` (`equipment_code`),
     KEY `idx_equipment_definition_type_rarity` (`equipment_type`, `rarity_code`),
     CONSTRAINT `chk_equipment_definition_price`
-        CHECK (`price` >= 0)
+        CHECK (`price` >= 0),
+    CONSTRAINT `chk_equipment_definition_rarity`
+        CHECK (`rarity_code` IN ('COMMON', 'UNCOMMON', 'RARE', 'EPIC', 'LEGENDARY'))
 ) ENGINE = InnoDB
   DEFAULT CHARACTER SET = utf8mb4
   COLLATE = utf8mb4_unicode_ci
@@ -214,9 +216,7 @@ CREATE TABLE IF NOT EXISTS `book_definition`
     `equipment_id`                  CHAR(32)       NOT NULL COMMENT '父装备定义ID，同时作为主键',
     `growth_domain_code`            VARCHAR(64)    NOT NULL COMMENT '阅读收益所属领域，不限制人物身份',
     `reading_requirement_json`      JSON           NOT NULL COMMENT '固定结构的阅读条件',
-    `difficulty`                    INT            NOT NULL COMMENT '阅读难度',
-    `required_progress`             INT            NOT NULL COMMENT '完成阅读所需总进度',
-    `base_progress_per_turn`        INT            NOT NULL COMMENT '单回合基础阅读进度',
+    `player_reading_enabled`        TINYINT(1)     NOT NULL DEFAULT 0 COMMENT '是否允许以身入局读书，仅科举类书籍开启',
     `ability_shizi_weight`          TINYINT        NOT NULL COMMENT '识字收益权重百分比',
     `ability_jingyi_weight`         TINYINT        NOT NULL COMMENT '经义收益权重百分比',
     `ability_wenzhang_weight`       TINYINT        NOT NULL COMMENT '文章收益权重百分比',
@@ -229,10 +229,10 @@ CREATE TABLE IF NOT EXISTS `book_definition`
     CONSTRAINT `fk_book_definition_equipment`
         FOREIGN KEY (`equipment_id`) REFERENCES `equipment_definition` (`id`)
             ON UPDATE RESTRICT ON DELETE CASCADE,
-    CONSTRAINT `chk_book_definition_difficulty`
-        CHECK (`difficulty` >= 0),
-    CONSTRAINT `chk_book_definition_progress`
-        CHECK (`required_progress` = 100 AND `base_progress_per_turn` > 0 AND `total_knowledge` >= 0),
+    CONSTRAINT `chk_book_definition_knowledge`
+        CHECK (`total_knowledge` >= 0),
+    CONSTRAINT `chk_book_definition_player_reading`
+        CHECK (`player_reading_enabled` IN (0, 1)),
     CONSTRAINT `chk_book_definition_weights`
         CHECK (`ability_shizi_weight` BETWEEN 0 AND 100
             AND `ability_jingyi_weight` BETWEEN 0 AND 100

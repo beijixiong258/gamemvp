@@ -5,6 +5,7 @@ import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
+import mvp.ai.GameClient;
 import mvp.engine.CharacterEngine.BookProgress;
 import mvp.engine.CharacterEngine.BookRule;
 import mvp.engine.CharacterEngine.CharacterState;
@@ -24,11 +25,13 @@ import mvp.service.CharacterService;
 import mvp.service.EquipmentRecordService;
 import mvp.service.EquipmentService;
 import mvp.utils.ClasspathJsonLoader;
+import mvp.utils.Calculator;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -41,6 +44,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static mvp.engine.GameRuleConstant.BOOK_COMPLETION_PROGRESS;
+
 @Service
 @RequiredArgsConstructor
 public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements BookService {
@@ -49,6 +54,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
     private static final String OWNED = "OWNED";
 
     private final ClasspathJsonLoader jsonLoader;
+    private final GameClient gameClient;
     private final CharacterEngine characterEngine;
     private final CharacterService characterService;
     private final EquipmentService equipmentService;
@@ -70,6 +76,11 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
             String code = definition.getEquipmentCode();
             if (code == null || code.isBlank() || equipmentByCode.containsKey(code)) {
                 throw new IllegalStateException("装备配置编码缺失或重复：" + code);
+            }
+            try {
+                Equipment.Rarity.valueOf(definition.getRarityCode());
+            } catch (IllegalArgumentException | NullPointerException exception) {
+                throw new IllegalStateException("装备品质编码无效：" + code, exception);
             }
             Equipment equipment = equipmentService.lambdaQuery().eq(Equipment::getEquipmentCode, code).one();
             if (equipment == null) {
@@ -116,6 +127,22 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
             GameSave save, String characterId, CharacterState character,
             ScholarState scholar, String bookCode, long settlementTurnNumber
     ) {
+        return settleBook(save, characterId, character, scholar, bookCode, settlementTurnNumber, null);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public BookActionResult readAsPlayer(
+            GameSave save, String characterId, CharacterState character,
+            ScholarState scholar, String bookCode, long settlementTurnNumber, int score
+    ) {
+        return settleBook(save, characterId, character, scholar, bookCode, settlementTurnNumber, score);
+    }
+
+    private BookActionResult settleBook(
+            GameSave save, String characterId, CharacterState character,
+            ScholarState scholar, String bookCode, long settlementTurnNumber, Integer score
+    ) {
         LibraryContext context = loadLibrary(save, characterId);
         Book book = context.books().stream()
                 .filter(candidate -> context.equipmentById().get(candidate.getEquipmentId())
@@ -123,14 +150,20 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "书籍编码不存在：" + bookCode));
         LibraryBook description = describeBook(book, save, character, scholar, context);
+        if (score != null) {
+            requirePlayerReading(description);
+        }
         if (!description.readable()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, String.join("；", description.blockedReasons()));
         }
         BookRecord record = context.progressByEquipmentId().get(book.getEquipmentId());
         BookProgress progress = new BookProgress(description.currentProgress(), description.totalReadTurnNumber(),
                 description.completed(), record == null ? null : record.getLastReadTurnNumber());
-        ReadBookResult settlement = characterEngine.readBook(character, scholar, bookRule(book), progress,
-                settlementTurnNumber, ThreadLocalRandom.current().nextInt(1, 101));
+        ReadBookResult settlement = score == null
+                ? characterEngine.readBook(character, scholar, bookRule(book), progress,
+                        settlementTurnNumber, ThreadLocalRandom.current().nextInt(1, 101))
+                : characterEngine.readBookAsPlayer(character, scholar, bookRule(book), progress,
+                        settlementTurnNumber, score);
         if (record == null) {
             record = new BookRecord().setCharacterId(characterId).setEquipmentId(book.getEquipmentId());
         }
@@ -140,6 +173,59 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
                 .setLastReadTurnNumber(settlement.progress().lastReadTurnNumber());
         bookRecordService.saveOrUpdate(record);
         return new BookActionResult(description.bookName(), settlement);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public LibraryBook requirePlayerReadingBook(GameSave save, String characterId, CharacterState character,
+                                               ScholarState scholar, String bookCode) {
+        LibraryBook book = listLibrary(save, characterId, character, scholar).stream()
+                .filter(candidate -> candidate.bookCode().equals(bookCode)).findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "书籍编码不存在：" + bookCode));
+        requirePlayerReading(book);
+        return book;
+    }
+
+    private void requirePlayerReading(LibraryBook book) {
+        if (!book.playerReadingEnabled()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "这本书不支持以身入局读书");
+        }
+        if (!book.readable()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, String.join("；", book.blockedReasons()));
+        }
+        if (book.completed()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "这本书已经读满，可通过普通读书温习");
+        }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public String generatePlayerReadingQuestion(LibraryBook book, String characterContext) {
+        JSONObject facts = new JSONObject().set("bookName", book.bookName())
+                .set("knowledgeSummary", book.knowledgeSummary()).set("currentProgress", book.currentProgress())
+                .set("characterFacts", JSONUtil.parseObj(characterContext));
+        ReadingQuestionOutput output = gameClient.chat("PROMPT_BOOK_PLAYER_QUESTION", facts.toString(),
+                ReadingQuestionOutput.class);
+        if (output.question() == null || output.question().isBlank() || output.question().length() > 2000) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI未返回有效的读书问题，请重试");
+        }
+        return output.question().strip();
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public PlayerReadingEvaluation evaluatePlayerReading(LibraryBook book, String question, String text) {
+        JSONObject facts = new JSONObject().set("bookName", book.bookName())
+                .set("knowledgeSummary", book.knowledgeSummary()).set("question", question).set("playerInput", text);
+        ReadingEvaluationOutput output = gameClient.chat("PROMPT_BOOK_PLAYER_EVALUATION", facts.toString(),
+                ReadingEvaluationOutput.class);
+        if (output.score() == null || output.evaluation() == null || output.evaluation().isBlank()
+                || output.evaluation().length() > 4000) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI未返回有效的读书评分，请重试");
+        }
+        int score = Calculator.clamp(BigDecimal.ZERO, BigDecimal.valueOf(100), output.score())
+                .setScale(0, RoundingMode.HALF_UP).intValue();
+        return new PlayerReadingEvaluation(score, output.evaluation().strip());
     }
 
     /**
@@ -249,8 +335,10 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
             }
         }
         return new LibraryBook(equipment.getEquipmentCode(), equipment.getEquipmentName(), equipment.getId(),
-                currentProgress, book.getRequiredProgress(), progress == null ? 0 : progress.getTotalReadTurnNumber(),
-                currentProgress >= book.getRequiredProgress(), reasons.isEmpty(), List.copyOf(reasons),
+                equipment.getRarityCode(), equipment.getRarityName(), equipment.getRarityColor(),
+                currentProgress, BOOK_COMPLETION_PROGRESS, progress == null ? 0 : progress.getTotalReadTurnNumber(),
+                currentProgress >= BOOK_COMPLETION_PROGRESS, reasons.isEmpty(),
+                Boolean.TRUE.equals(book.getPlayerReadingEnabled()), List.copyOf(reasons),
                 book.getKnowledgeSummary(), context.ownedQuantities().getOrDefault(book.getEquipmentId(), 0),
                 equipment.getPrice(), equipment.getSupplierNpcCode(), book.getTotalKnowledge(),
                 characterEngine.knowledgeContribution(book.getTotalKnowledge(), currentProgress));
@@ -266,11 +354,9 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
         if (!SCHOLAR_DOMAIN.equals(book.getGrowthDomainCode())) {
             throw new IllegalStateException("当前阅读引擎不支持成长领域：" + book.getGrowthDomainCode());
         }
-        BookRule rule = new BookRule(book.getDifficulty(), book.getRequiredProgress(), book.getBaseProgressPerTurn(),
-                book.getAbilityShiziWeight(), book.getAbilityJingyiWeight(), book.getAbilityWenzhangWeight(),
+        BookRule rule = new BookRule(book.getAbilityShiziWeight(), book.getAbilityJingyiWeight(), book.getAbilityWenzhangWeight(),
                 book.getAbilityCelunWeight(), book.getAbilityWenxueWeight(), book.getFatigueCost());
-        if (rule.requiredProgress() != 100 || book.getTotalKnowledge() == null || book.getTotalKnowledge() < 0
-                || rule.baseProgressPerTurn() <= 0 || rule.difficulty() < 0
+        if (book.getTotalKnowledge() == null || book.getTotalKnowledge() < 0
                 || rule.fatigueCost() < 0 || rule.abilityShiziWeight() < 0 || rule.abilityJingyiWeight() < 0
                 || rule.abilityWenzhangWeight() < 0 || rule.abilityCelunWeight() < 0 || rule.abilityWenxueWeight() < 0
                 || rule.abilityShiziWeight() + rule.abilityJingyiWeight() + rule.abilityWenzhangWeight()
@@ -325,6 +411,12 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
                 .map(record -> characterEngine.knowledgeContribution(
                         books.get(record.getEquipmentId()).getTotalKnowledge(), record.getCurrentProgress()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    public record ReadingQuestionOutput(String question) {
+    }
+
+    public record ReadingEvaluationOutput(BigDecimal score, String evaluation) {
     }
 
     private record LibraryContext(

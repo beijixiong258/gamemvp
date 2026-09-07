@@ -30,7 +30,7 @@ public class GameClient {
     }
 
     /**
-     * 按提示词编码执行一次结构化模型调用，供自由行动、对话和考试服务复用。
+     * 按提示词编码执行一次结构化模型调用，供自由行动、对话、读书和考试服务复用。
      *
      * @param promptCode prompt.json中的提示词编码
      * @param userText 本次任务的动态输入和游戏上下文

@@ -53,6 +53,12 @@ public interface GameSaveService extends IService<GameSave> {
      */
     List<LibraryBook> listBooks(String saveId);
 
+    /** 为当前回合的指定书籍生成并缓存体会题；重复请求复用原题，不消耗回合。 */
+    JSONObject preparePlayerReading(String saveId, String bookCode, PlayerReadingQuestionCommand command);
+
+    /** 评阅玩家体会并结算一个读书回合；questionId同时作为本题唯一交卷依据。 */
+    JSONObject completePlayerReading(String saveId, String bookCode, PlayerReadingAnswerCommand command);
+
     /**
      * 结算一次固定行动，并在同一事务中保存数值、日历及触发的考试。
      *
@@ -203,6 +209,12 @@ public interface GameSaveService extends IService<GameSave> {
     }
 
     record PlayerExamCommand(String requestId, String text) {
+    }
+
+    record PlayerReadingQuestionCommand(String sceneCode, Long expectedTurnNumber) {
+    }
+
+    record PlayerReadingAnswerCommand(String questionId, String text) {
     }
 
     record FreeActionCommand(String requestId, String sceneCode, String text, Long expectedTurnNumber) {
