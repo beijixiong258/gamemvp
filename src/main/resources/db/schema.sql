@@ -347,7 +347,8 @@ CREATE TABLE IF NOT EXISTS `memory_record`
     `save_id`                   CHAR(32) NOT NULL COMMENT '所属存档ID',
     `owner_character_id`        CHAR(32) NOT NULL COMMENT '记忆拥有者人物ID',
     `source_event_id`           CHAR(32) NOT NULL COMMENT '来源事件ID',
-    `ai_memory_summary`         TEXT     NOT NULL COMMENT 'AI生成的记忆摘要',
+    `scene_code`                VARCHAR(64) NULL COMMENT '记忆对应场景编码，仅供检索',
+    `related_equipment_code_json` JSON    NOT NULL COMMENT '已确认涉及的物品编码数组',
     `related_character_id_json` JSON     NOT NULL COMMENT '相关人物ID组成的JSON数组',
     `occurred_turn_number`      BIGINT   NOT NULL COMMENT '对应事件发生时的总回合编号',
     PRIMARY KEY (`id`),
@@ -366,7 +367,7 @@ CREATE TABLE IF NOT EXISTS `memory_record`
 ) ENGINE = InnoDB
   DEFAULT CHARACTER SET = utf8mb4
   COLLATE = utf8mb4_unicode_ci
-  COMMENT = '人物长期记忆';
+  COMMENT = '人物长期记忆索引，正文存于本地memory目录JSON';
 
 CREATE TABLE IF NOT EXISTS `exam_record`
 (

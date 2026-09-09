@@ -6,8 +6,10 @@ import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import mvp.entity.EventRecord;
 import mvp.mapper.EventRecordMapper;
 import mvp.service.EventRecordService;
+import mvp.service.MemoryRecordService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -16,9 +18,22 @@ import java.util.List;
 @Service
 public class EventRecordServiceImpl extends ServiceImpl<EventRecordMapper, EventRecord> implements EventRecordService {
     private final JsonMapper jsonMapper;
+    private final MemoryRecordService memoryRecordService;
 
-    public EventRecordServiceImpl(JsonMapper jsonMapper) {
+    public EventRecordServiceImpl(JsonMapper jsonMapper, MemoryRecordService memoryRecordService) {
         this.jsonMapper = jsonMapper;
+        this.memoryRecordService = memoryRecordService;
+    }
+
+    /** 只有事实事件提交后才尝试生成记忆，摘要失败不撤销游戏结算。 */
+    @Override
+    @Transactional
+    public boolean save(EventRecord event) {
+        boolean saved = super.save(event);
+        if (saved) {
+            memoryRecordService.rememberAfterCommit(event);
+        }
+        return saved;
     }
 
     /** {@inheritDoc} */

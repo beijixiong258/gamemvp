@@ -36,7 +36,7 @@ public class FreeActionResolver {
     /**
      * 解析一轮对话；普通轮只返回回应和本轮行为，结束轮额外给出整场属性变化。
      *
-     * @param context 当前事实、对话对象、完整历史、本轮原文和手动结束标志
+     * @param context 当前事实、对方私有记忆、对话轮数、完整历史、本轮原文和手动结束标志
      * @return 回应、结束决定、属性驱动量与本轮获取意图
      */
     public DialogueResolution resolveDialogue(String context) {

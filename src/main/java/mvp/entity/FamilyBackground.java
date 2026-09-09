@@ -16,5 +16,5 @@ public class FamilyBackground {
     private String id; // 初始家庭背景ID
     private String saveId; // 所属存档ID
     private Integer initialWealth; // 开局家庭财富，单位为文
-    private String backgroundSummary; // 开局时固定的家庭背景摘要
+    private String backgroundSummary; // 初始家庭背景；独立生成成功后保存六岁入学前的童年叙事
 }

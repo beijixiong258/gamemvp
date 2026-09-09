@@ -1,7 +1,9 @@
 package mvp.controller;
 
 import lombok.RequiredArgsConstructor;
+import mvp.entity.FamilyBackground;
 import mvp.entity.Region;
+import mvp.service.FamilyBackgroundService;
 import mvp.service.GameSaveService;
 import mvp.service.GameSaveService.SaveDetail;
 import mvp.service.GameSaveService.StartLifeCommand;
@@ -21,6 +23,13 @@ import java.util.List;
 public class GameSaveController {
 
     private final GameSaveService gameSaveService;
+    private final FamilyBackgroundService familyBackgroundService;
+
+    /** 独立生成并缓存童年背景；已有结果时直接返回，失败可重试。 */
+    @PostMapping("/{saveId}/background")
+    public FamilyBackground prepareBackground(@PathVariable String saveId) {
+        return familyBackgroundService.prepareNarrative(saveId);
+    }
 
     /** 返回新开局/读档页面使用的存档概要，不加载完整事件。 */
     @GetMapping

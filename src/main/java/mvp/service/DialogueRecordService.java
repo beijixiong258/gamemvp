@@ -16,7 +16,7 @@ public interface DialogueRecordService extends IService<DialogueRecord> {
     JSONObject start(String saveId, String actorId, StartDialogueCommand command);
 
     /**
-     * 发送消息或手动结束；模型在事务外，实际交易和结束属性结算在短事务内。
+     * 发送消息或手动结束；AI可提前终止且第5轮必须返回结束标志，实际结算在短事务内。
      *
      * @param saveId 存档ID
      * @param dialogueId 对话ID

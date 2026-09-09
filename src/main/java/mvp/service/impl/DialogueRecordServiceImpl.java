@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import mvp.ai.FreeActionResolver;
 import mvp.engine.CharacterEngine;
+import mvp.engine.GameRuleConstant;
 import mvp.entity.Character;
 import mvp.entity.DialogueRecord;
 import mvp.entity.GameSave;
@@ -18,6 +19,7 @@ import mvp.service.DialogueRecordService;
 import mvp.service.EquipmentRecordService.AcquisitionIntent;
 import mvp.service.EventRecordService;
 import mvp.service.GameSaveService;
+import mvp.service.MemoryRecordService;
 import mvp.utils.ClasspathJsonLoader;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -36,6 +38,7 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
     private final GameSaveMapper gameSaveMapper;
     private final CharacterService characterService;
     private final EventRecordService eventRecordService;
+    private final MemoryRecordService memoryRecordService;
     private final ClasspathJsonLoader jsonLoader;
     private final FreeActionResolver resolver;
     private final CharacterEngine characterEngine;
@@ -98,13 +101,21 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
         if (counterpart == null || !Boolean.TRUE.equals(counterpart.getEnabled())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "对话对象已不可用");
         }
+        int dialogueRound = before.getVersion() + 1;
+        String memories = memoryRecordService.recall(saveId, counterpart.getId(), before.getActorId(),
+                GameRuleConstant.MEMORY_CONTEXT_MAX_CHARACTERS);
         String input = new JSONObject().set("facts", JSONUtil.parseObj(snapshot.contextSummary())).set("counterpart", counterpart)
                 .set("history", JSONUtil.parseArray(before.getMessagesJson())).set("currentText", command.text())
-                .set("manualEnd", command.endDialogue()).toString();
+                .set("manualEnd", command.endDialogue()).set("dialogueRound", dialogueRound)
+                .set("maxDialogueRounds", GameRuleConstant.MAX_DIALOGUE_ROUNDS).set("memoryContext", JSONUtil.parseArray(memories)).toString();
         FreeActionResolver.DialogueResolution resolution = resolver.resolveDialogue(input);
         boolean end = command.endDialogue() || resolution.endDialogue();
-        if (resolution.reply() == null || (end && resolution.driverPatch() == null)) {
+        if (resolution.reply() == null || resolution.reply().isBlank()
+                || (end && resolution.driverPatch() == null)) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI返回内容不完整，请检查网络或账户余额后重试");
+        }
+        if (dialogueRound >= GameRuleConstant.MAX_DIALOGUE_ROUNDS && !end) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI未按要求结束本场对话，请重试");
         }
         CharacterEngine.DriverResult settlement = end
                 ? characterEngine.applyDriver(snapshot.character(), snapshot.scholar(), resolution.driverPatch()) : null;

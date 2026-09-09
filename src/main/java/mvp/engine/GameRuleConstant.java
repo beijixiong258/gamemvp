@@ -22,6 +22,8 @@ public final class GameRuleConstant {
     public static final int SICK_TURNS = 4;
     public static final int SICK_ATTRIBUTE_LOSS = 2;
     public static final int SICK_RECOVERY_HEALTH = 40;
+    public static final int MAX_DIALOGUE_ROUNDS = 5;
+    public static final int MEMORY_CONTEXT_MAX_CHARACTERS = 5_000;
     public static final int AI_ATTRIBUTE_CHANGE_LIMIT = 3;
     public static final int AI_ABILITY_CHANGE_LIMIT = 5;
     public static final int MIN_INITIAL_FAMILY_WEALTH = 10_000;

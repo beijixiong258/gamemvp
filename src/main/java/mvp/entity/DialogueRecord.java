@@ -19,5 +19,5 @@ public class DialogueRecord {
     private Long startedTurnNumber;
     private Integer version; // 每次成功对话往返加1，防止旧消息覆盖新历史
     private Boolean ended;
-    private String messagesJson; // 原文及已执行交易结果；只用于本场对话，不作为跨场记忆
+    private String messagesJson; // 本场原文及已执行交易；结束后作为压缩记忆来源，不直接带入后续上下文
 }

@@ -31,6 +31,7 @@ import mvp.service.EventRecordService;
 import mvp.service.ExamRecordService;
 import mvp.service.FamilyBackgroundService;
 import mvp.service.GameSaveService;
+import mvp.service.MemoryRecordService;
 import mvp.service.RegionService;
 import mvp.utils.ClasspathJsonLoader;
 import org.springframework.http.HttpStatus;
@@ -71,6 +72,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
     private final PlatformTransactionManager transactionManager;
     private final ExamRecordService examRecordService;
     private final EventRecordService eventRecordService;
+    private final MemoryRecordService memoryRecordService;
     private final ClasspathJsonLoader jsonLoader;
 
     private Map<String, JSONObject> actions;
@@ -113,6 +115,11 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         if (command == null || command.characterName() == null || command.characterName().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请填写人物姓名");
         }
+        String characterName = command.characterName().strip();
+        int nameLength = characterName.codePointCount(0, characterName.length());
+        if (nameLength < 2 || nameLength > 8) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "人物姓名须为2至8个字符");
+        }
         Region birthRegion = listBirthRegions().stream()
                 .filter(region -> Objects.equals(region.getId(), command.birthRegionId()))
                 .findFirst()
@@ -138,7 +145,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         CharacterEngine.CharacterState characterState = characterResult.character();
         Character character = new Character()
                 .setSaveId(gameSave.getId())
-                .setName(command.characterName())
+                .setName(characterName)
                 .setType(PLAYER_CHARACTER_TYPE)
                 .setWallet(GameRuleConstant.INITIAL_WALLET).setSickTurnsRemaining(0).setTitlesJson("[]")
                 .setBirthRegionId(characterResult.birthRegionId())
@@ -842,8 +849,11 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         if (!Objects.equals(command.expectedTurnNumber(), before.turnNumber())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "回合已变化，请读档后重试");
         }
+        String memories = memoryRecordService.recall(saveId, actorId, null,
+                GameRuleConstant.MEMORY_CONTEXT_MAX_CHARACTERS);
+        String facts = JSONUtil.parseObj(before.contextSummary()).set("memoryContext", JSONUtil.parseArray(memories)).toString();
         FreeActionWorkflow.FreeActionResult resolved = freeActionWorkflow.execute(
-                new FreeActionWorkflow.FreeActionCommand(command.text(), before.contextSummary(),
+                new FreeActionWorkflow.FreeActionCommand(command.text(), facts,
                         before.character(), before.scholar()));
         return new TransactionTemplate(transactionManager).execute(status -> settleAiAction(before, command.requestId(),
                 payload, resolved.settlement(), resolved.acquisitions(), true, resolved.eventSummary(), resolved.lifeMilestone()));
@@ -892,7 +902,8 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         prepareTriggeredExam(context, turn);
         if (milestone && settlement != null) {
             recordMilestone(context, "FREE_ACTION_MILESTONE", summary == null ? "一次重要经历" : summary,
-                    Map.of("character", context.character(), "scholarProfile", context.scholar()));
+                    Map.of("character", context.character(), "scholarProfile", context.scholar(),
+                            "sceneCode", before.sceneCode(), "executedTrades", trades));
         }
         advanceIllness(context);
         JSONObject result = new JSONObject().set("requestId", requestId).set("actorId", before.actorId())
