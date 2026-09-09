@@ -9,9 +9,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Component
@@ -20,13 +20,14 @@ public class GameClient {
     private static final String PROMPT_RESOURCE_PATH = "prompt/prompt.json";
 
     private final ChatClient chatClient;
-    private final Map<String, PromptDefinition> prompts;
+    private final Map<String, String> prompts;
 
     public GameClient(ChatClient.Builder builder, ClasspathJsonLoader jsonLoader) {
         this.chatClient = builder.build();
         PromptResource resource = jsonLoader.load(PROMPT_RESOURCE_PATH, PromptResource.class);
         this.prompts = resource.prompt().stream()
-                .collect(Collectors.toUnmodifiableMap(PromptDefinition::promptCode, Function.identity()));
+                .collect(Collectors.toUnmodifiableMap(PromptDefinition::promptCode,
+                        definition -> buildSystemText(resource, definition)));
     }
 
     /**
@@ -39,9 +40,8 @@ public class GameClient {
      * @return 模型响应映射后的结构化结果
      */
     public <T> T chat(String promptCode, String userText, Class<T> type) {
-        PromptDefinition definition = getPrompt(promptCode);
         Prompt prompt = new Prompt(
-                new SystemMessage(definition.systemText()),
+                new SystemMessage(getPrompt(promptCode)),
                 new UserMessage(userText)
         );
         try {
@@ -56,20 +56,46 @@ public class GameClient {
         }
     }
 
-    private PromptDefinition getPrompt(String promptCode) {
-        PromptDefinition prompt = prompts.get(promptCode);
+    private String getPrompt(String promptCode) {
+        String prompt = prompts.get(promptCode);
         if (prompt == null) {
             throw new IllegalArgumentException("不存在提示词配置：" + promptCode);
         }
         return prompt;
     }
 
-    private record PromptResource(List<PromptDefinition> prompt) {
+    /** 启动时复用公共规则组，按背景、角色、任务、指示组装完整提示词。 */
+    private static String buildSystemText(PromptResource resource, PromptDefinition definition) {
+        List<String> rules = new ArrayList<>(resource.commonRules());
+        for (String ref : definition.ruleRefs()) {
+            List<String> sharedRules = resource.ruleGroups().get(ref);
+            if (sharedRules == null) {
+                throw new IllegalArgumentException("提示词" + definition.promptCode() + "引用了不存在的规则组：" + ref);
+            }
+            rules.addAll(sharedRules);
+        }
+        rules.addAll(definition.rules());
+        return String.join("\n\n",
+                "一、游戏背景\n" + resource.gameBackground(),
+                "二、智能体角色\n" + definition.role(),
+                "三、任务\n" + definition.task(),
+                "四、具体指示\n- " + String.join("\n- ", rules));
+    }
+
+    private record PromptResource(
+            String gameBackground,
+            List<String> commonRules,
+            Map<String, List<String>> ruleGroups,
+            List<PromptDefinition> prompt
+    ) {
     }
 
     private record PromptDefinition(
             String promptCode,
-            String systemText
+            String role,
+            String task,
+            List<String> ruleRefs,
+            List<String> rules
     ) {
     }
 }

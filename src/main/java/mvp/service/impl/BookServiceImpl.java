@@ -188,9 +188,6 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
         if (!book.readable()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, String.join("；", book.blockedReasons()));
         }
-        if (book.completed()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "这本书已经读满，可通过普通读书温习");
-        }
     }
 
     @Override
@@ -279,7 +276,11 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
         Equipment equipment = context.equipmentById().get(book.getEquipmentId());
         BookRecord progress = context.progressByEquipmentId().get(book.getEquipmentId());
         int currentProgress = progress == null ? 0 : progress.getCurrentProgress();
+        boolean completed = currentProgress >= BOOK_COMPLETION_PROGRESS;
         List<String> reasons = new ArrayList<>();
+        if (completed) {
+            reasons.add("这本书已完成，不能继续阅读");
+        }
         if (!"STUDYING".equals(save.getStatus())) {
             reasons.add("当前存档不处于自由成长阶段");
         }
@@ -321,7 +322,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
         return new LibraryBook(equipment.getEquipmentCode(), equipment.getEquipmentName(), equipment.getId(),
                 equipment.getRarityCode(), equipment.getRarityName(), equipment.getRarityColor(),
                 currentProgress, BOOK_COMPLETION_PROGRESS, progress == null ? 0 : progress.getTotalReadTurnNumber(),
-                currentProgress >= BOOK_COMPLETION_PROGRESS, reasons.isEmpty(),
+                completed, reasons.isEmpty(),
                 Boolean.TRUE.equals(book.getPlayerReadingEnabled()), List.copyOf(reasons),
                 book.getKnowledgeSummary(), context.ownedQuantities().getOrDefault(book.getEquipmentId(), 0),
                 equipment.getPrice(), equipment.getSupplierNpcCode(), book.getTotalKnowledge(),

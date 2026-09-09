@@ -175,6 +175,9 @@ public class CharacterEngine {
             CharacterState character, ScholarState scholar, BookRule book, BookProgress progress,
             long settlementTurnNumber, BigDecimal studyAmount, int progressGain, Integer diceRoll
     ) {
+        if (progress.currentProgress() >= BOOK_COMPLETION_PROGRESS) {
+            throw new IllegalArgumentException("这本书已完成，不能继续阅读");
+        }
         int progressAfter = Calculator.clamp(
                 0,
                 BOOK_COMPLETION_PROGRESS,
@@ -189,13 +192,9 @@ public class CharacterEngine {
                         weightedAbility.divide(Calculator.decimal("120"), 8, RoundingMode.HALF_UP)
                 )
         );
-        BigDecimal reviewFactor = progress.currentProgress() >= BOOK_COMPLETION_PROGRESS
-                ? Calculator.decimal("0.35")
-                : Calculator.ONE;
         BigDecimal learningPool = Calculator.decimal("0.50")
                 .add(Calculator.decimal("0.20").multiply(studyAmount))
-                .multiply(diminishingFactor)
-                .multiply(reviewFactor);
+                .multiply(diminishingFactor);
         if (Integer.valueOf(1).equals(diceRoll)) {
             learningPool = BigDecimal.ZERO;
         }

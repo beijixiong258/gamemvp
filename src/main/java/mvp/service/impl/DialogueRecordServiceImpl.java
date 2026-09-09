@@ -68,9 +68,9 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
         }
         if (counterpart.getNpcCode() != null) {
             boolean present = jsonLoader.load("game/scene.json", JSONObject.class).getJSONArray("scene")
-                    .toList(JSONObject.class).stream().anyMatch(scene ->
-                            Objects.equals(scene.getStr("sceneCode"), command.sceneCode())
-                                    && scene.getJSONArray("availableNpcCode").contains(counterpart.getNpcCode()));
+                    .toList(JSONObject.class).stream().anyMatch(candidate ->
+                            Objects.equals(candidate.getStr("sceneCode"), command.sceneCode())
+                                    && candidate.getJSONArray("availableNpcCode").contains(counterpart.getNpcCode()));
             if (!present) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "对话对象不在当前场景");
             }
