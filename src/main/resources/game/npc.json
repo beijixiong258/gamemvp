@@ -5,7 +5,7 @@
       "displayName": "父亲",
       "roleCode": "ROLE_FUQIN",
       "nameMode": "FIXED",
-      "defaultSceneCode": "SCENE_JIA",
+      "defaultSceneCode": "SCENE_JIA_SHUFANG",
       "personalitySummary": "关心家庭生计和孩子前途，表达方式较为克制。",
       "enabled": true
     },
@@ -14,25 +14,25 @@
       "displayName": "母亲",
       "roleCode": "ROLE_MUQIN",
       "nameMode": "FIXED",
-      "defaultSceneCode": "SCENE_JIA",
+      "defaultSceneCode": "SCENE_JIA_ZHUWO",
       "personalitySummary": "重视孩子的身体与日常生活，会留意疲劳和健康。",
       "enabled": true
     },
     {
       "npcCode": "NPC_XIANSHENG",
-      "displayName": "私塾先生",
+      "displayName": "窦苞",
       "roleCode": "ROLE_XIANSHENG",
       "nameMode": "FIXED",
-      "defaultSceneCode": "SCENE_SISHU",
-      "personalitySummary": "治学严谨，重视基础、礼法和循序渐进。",
+      "defaultSceneCode": "SCENE_SISHU_JIANGTANG",
+      "personalitySummary": "成年女性，知微私塾的启蒙女塾师，名叫窦苞。齐颈短发，青绿交领衫，手持线装书。说话温和，善用生活比喻，偶有俏皮，重视理解和循序渐进；她是本世界的人物，不是现实AI产品。负责授课、评阅体会和提供免费教材。",
       "enabled": true
     },
     {
       "npcCode": "NPC_JIAHAO",
-      "displayName": "隔壁班嘉豪",
+      "displayName": "嘉豪",
       "roleCode": "ROLE_TONGCHUANG",
       "nameMode": "FIXED",
-      "defaultSceneCode": "SCENE_SISHU",
+      "defaultSceneCode": "SCENE_SISHU_JIANGTANG",
       "personalitySummary": "与玩家年龄相近，会根据共同经历形成自然态度。",
       "enabled": true
     },
@@ -47,11 +47,20 @@
     },
     {
       "npcCode": "NPC_SHANGREN",
-      "displayName": "书商陆掌柜",
+      "displayName": "陆掌柜",
       "roleCode": "ROLE_SHANGREN",
       "nameMode": "FIXED",
       "defaultSceneCode": "SCENE_JISHI",
       "personalitySummary": "做买卖讲究现钱现货，偶尔从不知名的穿越者手中收到离奇书籍。",
+      "enabled": true
+    },
+    {
+      "npcCode": "NPC_GUANSHU",
+      "displayName": "沈砚",
+      "roleCode": "ROLE_GUANSHU",
+      "nameMode": "FIXED",
+      "defaultSceneCode": "SCENE_SISHU_CANGSHUGE",
+      "personalitySummary": "成年男性，知微私塾藏书阁的管书人。耐心、爱惜书册，记性好，穿青灰布衫。介绍书目和阅读条件；不能发放教材、免除门槛或知道未参与的私人谈话，领取教材应请玩家到讲堂找窦苞。",
       "enabled": true
     }
   ]

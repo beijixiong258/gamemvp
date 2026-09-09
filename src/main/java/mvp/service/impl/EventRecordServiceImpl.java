@@ -36,7 +36,6 @@ public class EventRecordServiceImpl extends ServiceImpl<EventRecordMapper, Event
         return saved;
     }
 
-    /** {@inheritDoc} */
     @Override
     public JSONObject replay(String saveId, String requestId, Object payload) {
         if (requestId == null || requestId.isBlank() || requestId.length() > 120) {
@@ -53,7 +52,6 @@ public class EventRecordServiceImpl extends ServiceImpl<EventRecordMapper, Event
         return JSONUtil.parseObj(record.getSettlementResultJson());
     }
 
-    /** {@inheritDoc} */
     @Override
     public void recordOperation(String saveId, String actorId, String requestId, Object payload,
                                 String code, long turnNumber, Object result) {

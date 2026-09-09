@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title description">
+  <title id="title">默认人物头像</title>
+  <desc id="description">米白底色上的青灰人物剪影，用于尚无专属画像的人物。</desc>
+  <rect width="256" height="256" rx="32" fill="#f4eddd"/>
+  <circle cx="128" cy="122" r="98" fill="#e0e4d5"/>
+  <path d="M45 227c4-54 31-79 83-79s79 25 83 79" fill="#6d8074"/>
+  <path d="m98 155 30 29 30-29 15 15-45 48-45-48z" fill="#f4eddd"/>
+  <path d="m103 180 25 27 27-29 14 49H89z" fill="#52685c"/>
+  <path d="M84 91c0-31 17-49 44-49s44 18 44 49v23c0 32-20 50-44 50s-44-18-44-50z" fill="#c9c2af"/>
+  <path d="M83 105V86c0-31 18-48 45-48s45 17 45 48v19l-13-10-4-22c-17 15-33 20-62 20l-1 14z" fill="#526159"/>
+</svg>

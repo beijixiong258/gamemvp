@@ -20,7 +20,6 @@ public class TurnController {
     /**
      * 提交读书、练习文章或休息，并返回本回合完整结算。
      *
-     * @param saveId 存档ID
      * @param command 稳定请求编号、行动编码、场景、可选书籍及预期累计回合
      * @return 行动后的状态与实际变化
      */

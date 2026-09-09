@@ -89,7 +89,6 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
         this.exams = Map.copyOf(index);
     }
 
-    /** {@inheritDoc} */
     @Override
     @Transactional
     public ExamRecord prepare(GameSave save, String characterId, CharacterState character,
@@ -130,7 +129,6 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
         return exam;
     }
 
-    /** {@inheritDoc} */
     @Override
     public ExamRecord loadForCharacter(GameSave save, String characterId, String examId) {
         ExamRecord exam = getById(examId);
@@ -148,7 +146,6 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
         return exam;
     }
 
-    /** {@inheritDoc} */
     @Override
     public String generateThought(ExamRecord exam, String characterContext) {
         if (exam.getAiThoughtBubble() != null && !exam.getAiThoughtBubble().isBlank()) {
@@ -160,7 +157,6 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
         return requireAiText(output.thought(), 3000, "作答思路");
     }
 
-    /** {@inheritDoc} */
     @Override
     @Transactional
     public ExamRecord saveThought(GameSave save, String characterId, ExamRecord before, String thought) {
@@ -179,7 +175,6 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
         return exam.setAiThoughtBubble(thought);
     }
 
-    /** {@inheritDoc} */
     @Override
     public ExamResolution resolveAuto(ExamRecord exam, String characterContext) {
         if (completed(exam)) {
@@ -196,7 +191,6 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
                 requireAiText(narrative.summary(), 4000, "考试总结"));
     }
 
-    /** {@inheritDoc} */
     @Override
     public ExamResolution resolvePlayer(ExamRecord exam, String playerInput, String characterContext) {
         if (playerInput == null || playerInput.isBlank() || playerInput.length() > 8000) {
@@ -222,7 +216,6 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
         return new ExamResolution(PLAYER, playerInput, result, null, "内容评价：" + comment + "\n\n考试结果：" + summary);
     }
 
-    /** {@inheritDoc} */
     @Override
     @Transactional
     public ExamSettlement settleResolved(GameSave save, String characterId, ExamRecord before, ExamResolution resolution) {
@@ -253,7 +246,6 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
         return new ExamSettlement(exam, true);
     }
 
-    /** {@inheritDoc} */
     @Override
     public List<ExamRecord> listForSave(String saveId) {
         return lambdaQuery().eq(ExamRecord::getSaveId, saveId).orderByAsc(ExamRecord::getTurnNumber).list();

@@ -14,9 +14,6 @@ public class RegionServiceImpl extends ServiceImpl<RegionMapper, Region> impleme
     // 与schema.sql中惠州节点的主键一致，出生范围只依赖父子关系。
     private static final String HUIZHOU_REGION_ID = "3";
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public List<Region> listMvpBirthRegions() {
         Region huizhou = getById(HUIZHOU_REGION_ID);

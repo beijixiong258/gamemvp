@@ -37,3 +37,8 @@ build/
 
 ### Local game memories ###
 /memory/*/
+
+### Frontend ###
+/src/frontend/node_modules/
+/src/frontend/dist/
+/src/frontend/*.tsbuildinfo

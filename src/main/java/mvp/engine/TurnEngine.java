@@ -2,9 +2,7 @@ package mvp.engine;
 
 import org.springframework.stereotype.Component;
 
-/**
- * 游戏时间与成长阶段引擎，负责推进回合并在指定年龄切换到考试流程。
- */
+/** 游戏时间与成长阶段引擎，负责推进回合并在指定年龄切换到考试流程。 */
 @Component
 public class TurnEngine {
 
@@ -86,7 +84,6 @@ public class TurnEngine {
      * 完成当前考试流程；阶段考试回到求学，县试结束本局。
      *
      * @param current 考试结算前的时间与流程状态
-     * @param examType 已完成的考试类型编码
      * @return 考试完成后的流程状态
      */
     public TurnState completeExam(TurnState current, String examType) {
@@ -117,7 +114,6 @@ public class TurnEngine {
     /**
      * 查询指定年龄是否存在刚性考试节点。
      *
-     * @param age 当前周岁
      * @return 对应考试类型；没有考试时返回null
      */
     public String examTypeAtAge(int age) {
@@ -133,7 +129,6 @@ public class TurnEngine {
     /**
      * 把公元年份转换为嘉靖纪年。
      *
-     * @param currentYear 公元年份
      * @return 对应的嘉靖年序，例如1547返回26
      */
     public int jiajingYear(int currentYear) {

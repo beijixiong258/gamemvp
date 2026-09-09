@@ -4,8 +4,15 @@
       "actionCode": "READ_BOOK",
       "actionName": "读书",
       "actionType": "FIXED_ACTION",
-      "availableSceneCode": ["SCENE_SISHU"],
-      "requiredParameter": ["bookCode"],
+      "availableSceneCode": [
+        "SCENE_SISHU",
+        "SCENE_JIA_SHUFANG",
+        "SCENE_SISHU_JIANGTANG",
+        "SCENE_SISHU_CANGSHUGE"
+      ],
+      "requiredParameter": [
+        "bookCode"
+      ],
       "engineRuleCode": "RULE_READ_BOOK",
       "feedbackTextCode": "TEXT_READ_BOOK_RESULT",
       "endTurn": true
@@ -14,8 +21,15 @@
       "actionCode": "READ_BOOK_PLAYER",
       "actionName": "以身入局读书",
       "actionType": "BOOK_PLAYER_ACTION",
-      "availableSceneCode": ["SCENE_SISHU"],
-      "requiredParameter": ["bookCode", "questionId", "text"],
+      "availableSceneCode": [
+        "SCENE_SISHU",
+        "SCENE_SISHU_JIANGTANG"
+      ],
+      "requiredParameter": [
+        "bookCode",
+        "questionId",
+        "text"
+      ],
       "engineRuleCode": "RULE_READ_BOOK_PLAYER",
       "endTurn": true
     },
@@ -23,7 +37,10 @@
       "actionCode": "PRACTICE_WRITING",
       "actionName": "练习文章",
       "actionType": "FIXED_ACTION",
-      "availableSceneCode": ["SCENE_SISHU"],
+      "availableSceneCode": [
+        "SCENE_SISHU",
+        "SCENE_SISHU_JIANGTANG"
+      ],
       "requiredParameter": [],
       "engineRuleCode": "RULE_PRACTICE_WRITING",
       "feedbackTextCode": "TEXT_PRACTICE_WRITING_RESULT",
@@ -33,7 +50,10 @@
       "actionCode": "REST",
       "actionName": "休息",
       "actionType": "FIXED_ACTION",
-      "availableSceneCode": ["SCENE_JIA"],
+      "availableSceneCode": [
+        "SCENE_JIA",
+        "SCENE_JIA_WOSHI"
+      ],
       "requiredParameter": [],
       "engineRuleCode": "RULE_REST",
       "feedbackTextCode": "TEXT_REST_RESULT",
@@ -43,8 +63,19 @@
       "actionCode": "FREE_ACTION",
       "actionName": "自由行动",
       "actionType": "FREE_ACTION",
-      "availableSceneCode": ["SCENE_JIA", "SCENE_SISHU", "SCENE_JISHI"],
-      "requiredParameter": ["text"],
+      "availableSceneCode": [
+        "SCENE_JIA",
+        "SCENE_SISHU",
+        "SCENE_JISHI",
+        "SCENE_JIA_WOSHI",
+        "SCENE_JIA_SHUFANG",
+        "SCENE_JIA_ZHUWO",
+        "SCENE_SISHU_JIANGTANG",
+        "SCENE_SISHU_CANGSHUGE"
+      ],
+      "requiredParameter": [
+        "text"
+      ],
       "engineRuleCode": "RULE_DRIVER",
       "promptCode": "PROMPT_FREE_ACTION",
       "endTurn": true
@@ -53,8 +84,18 @@
       "actionCode": "NPC_DIALOGUE",
       "actionName": "NPC对话",
       "actionType": "NPC_DIALOGUE",
-      "availableSceneCode": ["SCENE_JIA", "SCENE_SISHU", "SCENE_JISHI"],
-      "requiredParameter": ["counterpartId"],
+      "availableSceneCode": [
+        "SCENE_JIA",
+        "SCENE_SISHU",
+        "SCENE_JISHI",
+        "SCENE_JIA_SHUFANG",
+        "SCENE_JIA_ZHUWO",
+        "SCENE_SISHU_JIANGTANG",
+        "SCENE_SISHU_CANGSHUGE"
+      ],
+      "requiredParameter": [
+        "counterpartId"
+      ],
       "engineRuleCode": "RULE_NPC_DIALOGUE",
       "promptCode": "PROMPT_NPC_DIALOGUE",
       "endTurn": false
@@ -63,8 +104,17 @@
       "actionCode": "ACQUIRE_EQUIPMENT",
       "actionName": "获取物品",
       "actionType": "EQUIPMENT_ACTION",
-      "availableSceneCode": ["SCENE_SISHU", "SCENE_JISHI"],
-      "requiredParameter": ["requestId", "supplierNpcCode", "equipmentCode", "quantity"],
+      "availableSceneCode": [
+        "SCENE_SISHU",
+        "SCENE_JISHI",
+        "SCENE_SISHU_JIANGTANG"
+      ],
+      "requiredParameter": [
+        "requestId",
+        "supplierNpcCode",
+        "equipmentCode",
+        "quantity"
+      ],
       "engineRuleCode": "RULE_ACQUIRE_EQUIPMENT",
       "endTurn": false
     },
@@ -72,7 +122,11 @@
       "actionCode": "EXAM_AUTO",
       "actionName": "系统代行",
       "actionType": "EXAM_ACTION",
-      "availableSceneCode": ["SCENE_SISHU", "SCENE_XIANSHI"],
+      "availableSceneCode": [
+        "SCENE_SISHU",
+        "SCENE_XIANSHI",
+        "SCENE_SISHU_JIANGTANG"
+      ],
       "requiredParameter": [],
       "engineRuleCode": "RULE_EXAM_AUTO",
       "promptCode": "PROMPT_EXAM_ANSWER",
@@ -82,8 +136,14 @@
       "actionCode": "EXAM_PLAYER",
       "actionName": "以身入局",
       "actionType": "EXAM_ACTION",
-      "availableSceneCode": ["SCENE_SISHU", "SCENE_XIANSHI"],
-      "requiredParameter": ["text"],
+      "availableSceneCode": [
+        "SCENE_SISHU",
+        "SCENE_XIANSHI",
+        "SCENE_SISHU_JIANGTANG"
+      ],
+      "requiredParameter": [
+        "text"
+      ],
       "engineRuleCode": "RULE_EXAM_PLAYER",
       "promptCode": "PROMPT_EXAM_EVALUATION",
       "endTurn": false

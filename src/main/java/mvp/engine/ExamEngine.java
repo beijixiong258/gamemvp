@@ -6,19 +6,14 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
-/**
- * 考试数值引擎，负责从人物状态和题目权重计算整数成绩，不生成考试叙事。
- */
+/** 考试数值引擎，负责从人物状态和题目权重计算整数成绩，不生成考试叙事。 */
 @Component
 public class ExamEngine {
 
     /**
      * 创建考试数值快照，供思维泡泡Resolver和后续两种答题路径共同使用。
      *
-     * @param character 当前人物状态
-     * @param scholar 当前书生能力
      * @param knowledgeTotal 人物全部已读书籍贡献的学识总量
-     * @param weights 当前考试题目的计分权重
      * @return 已学知识值、基础能力分、临场偏移和思维层级
      */
     public ExamPreparation prepare(
@@ -68,10 +63,6 @@ public class ExamEngine {
     /**
      * 按题目权重汇总通用属性、书生能力和知识值。
      *
-     * @param character 当前人物状态
-     * @param scholar 当前书生能力
-     * @param knowledgeScore 已学知识值
-     * @param weights 当前考试题目的计分权重
      * @return 0到100之间的整数基础能力分
      */
     public int baseAbilityScore(
@@ -97,7 +88,6 @@ public class ExamEngine {
     /**
      * 根据健康、疲劳和体能计算确定的临场状态偏移。
      *
-     * @param character 考试开始时的人物状态
      * @return -8到4之间的整数状态偏移
      */
     public int stateOffset(CharacterEngine.CharacterState character) {
@@ -137,11 +127,8 @@ public class ExamEngine {
     /**
      * 结算系统代行路径，在角色能力及身体状态基础上应用已冻结的骰点。
      *
-     * @param baseAbilityScore 基础能力分
-     * @param stateOffset 临场状态偏移
      * @param diceRoll 考试开始时保存的骰点，不能在重传时重投
      * @param luckOffset 考试准备时已保存的普通骰点修正
-     * @param passThreshold 当前考试通过线
      * @return 最终成绩与通过状态
      */
     public ExamResult settleAuto(int baseAbilityScore, int stateOffset, int diceRoll, int luckOffset, int passThreshold) {
@@ -152,12 +139,9 @@ public class ExamEngine {
     /**
      * 结算玩家“以身入局”路径，在角色成绩上叠加答案内容修正。
      *
-     * @param baseAbilityScore 基础能力分
-     * @param stateOffset 临场状态偏移
      * @param contentModifier AI给出的答案内容修正，先限制在-10至10，再取整
      * @param diceRoll 考试开始时保存的骰点，不能在重传时重投
      * @param luckOffset 考试准备时已保存的普通骰点修正
-     * @param passThreshold 当前考试通过线
      * @return 最终成绩、实际采用的内容修正与通过状态
      */
     public ExamResult settlePlayer(
@@ -185,7 +169,6 @@ public class ExamEngine {
      * @param finalScore 已收束的最终分
      * @param effectiveContentModifier 实际采用的玩家内容修正
      * @param diceRoll 考试开始时保存的骰点，不能在重传时重投
-     * @param passThreshold 当前考试通过线
      * @return 包含完成状态的考试结果
      */
     private ExamResult result(int finalScore, int effectiveContentModifier, int diceRoll, int passThreshold) {

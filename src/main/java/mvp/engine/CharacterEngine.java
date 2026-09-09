@@ -12,9 +12,7 @@ import static mvp.engine.GameRuleConstant.PLAYER_READING_MAX_PROGRESS;
 import static mvp.engine.GameRuleConstant.PLAYER_READING_MIN_PROGRESS;
 import static mvp.engine.GameRuleConstant.READING_PROGRESS_PER_TURN;
 
-/**
- * 人物成长数值引擎，根据人物快照和行动输入返回确定的结算结果，不访问数据库或模型。
- */
+/** 人物成长数值引擎，根据人物快照和行动输入返回确定的结算结果，不访问数据库或模型。 */
 @Component
 public class CharacterEngine {
 
@@ -66,12 +64,7 @@ public class CharacterEngine {
         );
     }
 
-    /**
-     * 计算智力对学习类行动的效率系数。
-     *
-     * @param character 当前人物状态
-     * @return 智力效率系数
-     */
+    /** 计算智力对学习类行动的效率系数。 */
     public BigDecimal intelligenceFactor(CharacterState character) {
         return INTELLIGENCE_BASE.add(
                 INTELLIGENCE_WEIGHT.multiply(
@@ -83,7 +76,6 @@ public class CharacterEngine {
     /**
      * 综合健康、体能和疲劳，计算当前身体状态效率。
      *
-     * @param character 当前人物状态
      * @return 限制在0.55到1.20之间的状态效率系数
      */
     public BigDecimal conditionFactor(CharacterState character) {
@@ -98,7 +90,6 @@ public class CharacterEngine {
      * 根据行动基础疲劳和人物状态计算实际疲劳增长。
      *
      * @param baseFatigue 行动配置的基础疲劳
-     * @param character 当前人物状态
      * @return 本次行动实际增加的整数疲劳
      */
     public int fatigueGain(int baseFatigue, CharacterState character) {
@@ -132,8 +123,6 @@ public class CharacterEngine {
     /**
      * 结算一次读书行动，包括阅读进度、书生能力、疲劳和过劳伤害。
      *
-     * @param character 当前人物状态
-     * @param scholar 当前书生能力
      * @param book 所读书籍的规则快照
      * @param progress 结算前的该书阅读记录
      * @param settlementTurnNumber 本次行动推进后的总回合编号
@@ -245,8 +234,6 @@ public class CharacterEngine {
     /**
      * 结算一次练习文章行动。
      *
-     * @param character 当前人物状态
-     * @param scholar 当前书生能力
      * @return 练习后的能力、疲劳和健康结果
      */
     public PracticeWritingResult practiceWriting(CharacterState character, ScholarState scholar) {
@@ -288,7 +275,6 @@ public class CharacterEngine {
     /**
      * 结算一次休息行动，先恢复疲劳，再恢复健康。
      *
-     * @param character 当前人物状态
      * @return 休息后的人物状态和实际恢复量
      */
     public RestResult rest(CharacterState character) {
@@ -319,8 +305,6 @@ public class CharacterEngine {
     /**
      * 把自由行动或对话Resolver给出的驱动量应用到人物与书生能力。
      *
-     * @param character 当前人物状态
-     * @param scholar 当前书生能力
      * @param patch Resolver输出的结构化驱动量
      * @return 收束后的状态与过劳伤害
      */
@@ -372,8 +356,6 @@ public class CharacterEngine {
     /**
      * 按书籍能力权重计算人物当前的综合书生能力。
      *
-     * @param scholar 当前书生能力
-     * @param book 当前书籍规则
      * @return 加权后的能力值
      */
     private BigDecimal weightedAbility(ScholarState scholar, BookRule book) {
@@ -387,8 +369,6 @@ public class CharacterEngine {
     /**
      * 从本回合学习池中计算一项能力的整数增长。
      *
-     * @param learningPool 本回合可分配的学习量
-     * @param weightPercentage 该项能力的百分比权重
      * @return 四舍五入后的非负能力增长
      */
     private int abilityGain(BigDecimal learningPool, int weightPercentage) {
@@ -398,8 +378,6 @@ public class CharacterEngine {
     /**
      * 把五项能力增长应用到当前书生状态并收束到合法范围。
      *
-     * @param current 当前书生能力
-     * @param gain 五项能力的本次增长
      * @return 收束后的书生能力
      */
     private ScholarState applyAbilityGain(ScholarState current, ScholarState gain) {
@@ -415,8 +393,6 @@ public class CharacterEngine {
     /**
      * 计算书生能力结算前后的实际差值。
      *
-     * @param before 结算前能力
-     * @param after 结算后能力
      * @return 五项能力的实际变化
      */
     private ScholarState difference(ScholarState before, ScholarState after) {
@@ -432,8 +408,6 @@ public class CharacterEngine {
     /**
      * 统一结算劳累行动产生的疲劳与过劳健康损失。
      *
-     * @param character 行动前人物状态
-     * @param baseFatigue 行动基础疲劳
      * @return 行动后人物状态、实际疲劳增长和健康损失
      */
     private WorkCondition settleWorkCondition(CharacterState character, int baseFatigue) {
@@ -456,8 +430,6 @@ public class CharacterEngine {
     /**
      * 把一个驱动量应用到0至100的人物数值。
      *
-     * @param current 当前整数值
-     * @param change 原始变化量
      * @return 四舍五入并收束后的整数值
      */
     private int applyBoundedChange(int current, BigDecimal change) {
@@ -494,7 +466,6 @@ public class CharacterEngine {
     /**
      * 结算一回合重病休养；最后一回合恢复到40健康。
      *
-     * @param current 当前人物状态
      * @param lastTurn 是否为最后一回合休养
      * @return 疲劳恢复后的人物状态
      */

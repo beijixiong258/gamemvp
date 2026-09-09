@@ -24,7 +24,6 @@ public class BookController {
     /**
      * 查询存档玩家的私塾书目、阅读进度和解锁条件。
      *
-     * @param saveId 存档ID
      * @return 书目与当前不可读原因
      */
     @GetMapping("/{saveId}")

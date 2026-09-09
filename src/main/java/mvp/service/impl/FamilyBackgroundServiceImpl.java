@@ -40,7 +40,6 @@ public class FamilyBackgroundServiceImpl extends ServiceImpl<FamilyBackgroundMap
     private final GameClient gameClient;
     private final PlatformTransactionManager transactionManager;
 
-    /** {@inheritDoc} */
     @Override
     public FamilyBackground prepareNarrative(String saveId) {
         if (saveId == null || saveId.isBlank()) {

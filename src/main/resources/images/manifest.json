@@ -1,0 +1,337 @@
+{
+  "schemaVersion": 1,
+  "description": "豪杰成长计划plus 图片素材目录。binding 对应已接入的界面地点和人物；业务许可由 game/scene.json 管理。路径相对于本清单所在目录。",
+  "bindingStatus": "implemented",
+  "artDirection": {
+    "setting": "明代广东的虚构人生游戏",
+    "style": "淡彩水墨与细腻手绘；暖米白、青灰、木色、靛蓝",
+    "backgrounds": "固定横向场景，无人物、界面或名称文字",
+    "portraits": "独立方形半身像，米白底，用于头像卡片和对话面板",
+    "items": "可复用物品图，书名与品质由界面展示"
+  },
+  "referenceSources": [
+    {
+      "id": "doubao-avatar",
+      "sourcePage": "https://m.baike.com/wikiid/7293085049381060619",
+      "imageUrl": "https://p3-sdbk2-media.byteimg.com/tos-cn-i-xv4ileqgde/2c9676b403b54ec1871627861b24dfda~tplv-xv4ileqgde-image.image",
+      "usage": "仅作窦苞外形参考；参考原图不随项目分发，运行时使用生成画像。"
+    }
+  ],
+  "assets": [
+    {
+      "id": "home-courtyard",
+      "name": "家中庭院",
+      "category": "scenes",
+      "path": "scenes/home-courtyard.png",
+      "width": 1672,
+      "height": 941,
+      "binding": {
+        "locationId": "home",
+        "sceneCode": null
+      },
+      "source": {
+        "kind": "ai-generated",
+        "tool": "image_gen",
+        "references": [],
+        "prompt": "Use case: historical-scene. Create one finished landscape background asset for a Chinese Ming-era narrative life-simulation game, Guangdong in the mid-1500s. Scene: the welcoming courtyard of a modest but comfortable landholding family's home, not a palace. Whitewashed and soft grey walls, weathered dark tiled roofs, timber doors, a stone path, two terracotta plant pots, a little bamboo, glimpses of a quiet study through an open side door. No people. Art direction: refined hand-painted 2D storybook environment, delicate ink contours and matte watercolor/gouache color, believable architecture and perspective, warm rice-paper cream, muted jade green and warm wood brown, gentle afternoon light, understated and calm, richly finished rather than a sketch. Landscape 16:9 composition for a full-screen fixed game background, eye-level wide shot; keep visual details mainly in middle and lower zones, low contrast in top left and right to allow UI overlays; readable when slightly darkened. No interface, no text, no signboards with writing, no calligraphy, no watermark, no modern objects, no people baked into the scene. Single cohesive image, not a grid or contact sheet."
+      }
+    },
+    {
+      "id": "classroom",
+      "name": "私塾讲堂",
+      "category": "scenes",
+      "path": "scenes/classroom.png",
+      "width": 1672,
+      "height": 941,
+      "binding": {
+        "locationId": "classroom",
+        "sceneCode": "SCENE_SISHU_JIANGTANG"
+      },
+      "source": {
+        "kind": "ai-generated",
+        "tool": "image_gen",
+        "references": [
+          {
+            "assetId": "home-courtyard",
+            "use": "art-style"
+          }
+        ],
+        "prompt": "Use case: historical-scene. Create ONE standalone finished game background. The supplied image is a STYLE REFERENCE ONLY: match its hand-painted ink-and-gouache finish, natural perspective, warm cream plaster, muted jade, aged dark wood, detailed but calm Ming Guangdong environment. Do not copy its courtyard composition. New scene: Interior of a modest Ming Chinese elementary private school lecture room, empty short rows of individual wooden study desks and stools, a larger teacher's lectern and brush rest, softly lit timber lattice windows, clay plaster walls, a few closed thread-bound books. It must feel suitable for young beginners taught by a female tutor, not an imperial academy. No blackboard, no classroom posters, no people. Landscape 16:9, eye-level wide shot, fixed background for a text-driven game. Keep corners low-contrast enough for overlays, focus detail in the middle/lower field. Architectural coherence and readable interiors. No people baked into backgrounds, no UI, no writing, no watermarks, no collage. Entire image should be this one scene."
+      }
+    },
+    {
+      "id": "library",
+      "name": "藏书阁",
+      "category": "scenes",
+      "path": "scenes/library.png",
+      "width": 1672,
+      "height": 941,
+      "binding": {
+        "locationId": "library",
+        "sceneCode": "SCENE_SISHU_CANGSHUGE"
+      },
+      "source": {
+        "kind": "ai-generated",
+        "tool": "image_gen",
+        "references": [
+          {
+            "assetId": "home-courtyard",
+            "use": "art-style"
+          }
+        ],
+        "prompt": "Use case: historical-scene. Create ONE standalone finished game background.\nThe supplied image is a STYLE REFERENCE ONLY: match its hand-painted ink-and-gouache finish, natural perspective, warm cream plaster, muted jade, aged dark wood, detailed but calm Ming Guangdong environment. Do not copy its courtyard composition.\nNew scene: Interior of the small book archive of the same modest Ming Chinese private school, two walls of warm wooden shelves with thread-bound book bundles lying horizontally, a catalogue desk with writing brush and inkstone, low reading table, bamboo beyond a lattice window. Human-scale, orderly, quiet, no tall modern library stacks, no people.\nLandscape 16:9, eye-level wide shot, fixed background for a text-driven game. Keep corners low-contrast enough for overlays, focus detail in the middle/lower field. Architectural coherence and readable interiors. No people baked into backgrounds, no UI, no writing, no watermarks, no collage. Entire image should be this one scene."
+      }
+    },
+    {
+      "id": "bedroom",
+      "name": "卧室",
+      "category": "scenes",
+      "path": "scenes/bedroom.png",
+      "width": 1672,
+      "height": 941,
+      "binding": {
+        "locationId": "bedroom",
+        "sceneCode": "SCENE_JIA_WOSHI"
+      },
+      "source": {
+        "kind": "ai-generated",
+        "tool": "image_gen",
+        "references": [
+          {
+            "assetId": "home-courtyard",
+            "use": "art-style"
+          }
+        ],
+        "prompt": "Use case: historical-scene. Create ONE standalone finished game background.\nThe supplied image is a STYLE REFERENCE ONLY: match its hand-painted ink-and-gouache finish, natural perspective, warm cream plaster, muted jade, aged dark wood, detailed but calm Ming Guangdong environment. Do not copy its courtyard composition.\nNew scene: The private bedroom of a six-year-old child in a comfortable modest Ming Chinese family home. Small wooden canopy bed with plain cream curtains and folded indigo quilt, low chest for clothes, a simple bamboo toy and a stool, plaster walls, timber window, morning light. Empty room with no people, non-luxurious, restful.\nLandscape 16:9, eye-level wide shot, fixed background for a text-driven game. Keep corners low-contrast enough for overlays, focus detail in the middle/lower field. Architectural coherence and readable interiors. No people baked into backgrounds, no UI, no writing, no watermarks, no collage. Entire image should be this one scene."
+      }
+    },
+    {
+      "id": "study",
+      "name": "书房",
+      "category": "scenes",
+      "path": "scenes/study.png",
+      "width": 1672,
+      "height": 941,
+      "binding": {
+        "locationId": "study",
+        "sceneCode": "SCENE_JIA_SHUFANG"
+      },
+      "source": {
+        "kind": "ai-generated",
+        "tool": "image_gen",
+        "references": [
+          {
+            "assetId": "home-courtyard",
+            "use": "art-style"
+          }
+        ],
+        "prompt": "Use case: historical-scene. Create ONE standalone finished game background.\nThe supplied image is a STYLE REFERENCE ONLY: match its hand-painted ink-and-gouache finish, natural perspective, warm cream plaster, muted jade, aged dark wood, detailed but calm Ming Guangdong environment. Do not copy its courtyard composition.\nNew scene: A modest family study in a Ming Chinese landholding household: a dark timber desk by a lattice window, brush holder and inkstone, closed thread-bound volumes and rolled papers, a comfortable plain wooden chair and bamboo outside, a small shelf and tea cup. Home-scale scholarly room, clearly different from a school library, no people.\nLandscape 16:9, eye-level wide shot, fixed background for a text-driven game. Keep corners low-contrast enough for overlays, focus detail in the middle/lower field. Architectural coherence and readable interiors. No people baked into backgrounds, no UI, no writing, no watermarks, no collage. Entire image should be this one scene."
+      }
+    },
+    {
+      "id": "parents-bedroom",
+      "name": "主卧",
+      "category": "scenes",
+      "path": "scenes/parents-bedroom.png",
+      "width": 1672,
+      "height": 941,
+      "binding": {
+        "locationId": "parents-bedroom",
+        "sceneCode": "SCENE_JIA_ZHUWO"
+      },
+      "source": {
+        "kind": "ai-generated",
+        "tool": "image_gen",
+        "references": [
+          {
+            "assetId": "home-courtyard",
+            "use": "art-style"
+          }
+        ],
+        "prompt": "Use case: historical-scene. Create ONE standalone finished game background.\nThe supplied image is a STYLE REFERENCE ONLY: match its hand-painted ink-and-gouache finish, natural perspective, warm cream plaster, muted jade, aged dark wood, detailed but calm Ming Guangdong environment. Do not copy its courtyard composition.\nNew scene: The parents' master bedroom in the same modest comfortable Ming Chinese home: a larger wooden canopy bed with understated muted rust and cream bedding, plain curtains tied open, a wooden clothes chest, small dressing table with a round bronze mirror, sewing basket, two stools, warm late-day light. No people and no intimate activity, ordinary domestic room.\nLandscape 16:9, eye-level wide shot, fixed background for a text-driven game. Keep corners low-contrast enough for overlays, focus detail in the middle/lower field. Architectural coherence and readable interiors. No people baked into backgrounds, no UI, no writing, no watermarks, no collage. Entire image should be this one scene."
+      }
+    },
+    {
+      "id": "county-street",
+      "name": "县城",
+      "category": "scenes",
+      "path": "scenes/county-street.png",
+      "width": 1672,
+      "height": 941,
+      "binding": {
+        "locationId": "county",
+        "sceneCode": null
+      },
+      "source": {
+        "kind": "ai-generated",
+        "tool": "image_gen",
+        "references": [
+          {
+            "assetId": "home-courtyard",
+            "use": "art-style"
+          }
+        ],
+        "prompt": "Use case: historical-scene. Create ONE standalone finished game background.\nThe supplied image is a STYLE REFERENCE ONLY: match its hand-painted ink-and-gouache finish, natural perspective, warm cream plaster, muted jade, aged dark wood, detailed but calm Ming Guangdong environment. Do not copy its courtyard composition.\nNew scene: An eye-level pedestrian view of a quiet Guangdong county-town street in Ming China, mid-1500s, weathered tile roof storefronts, white plaster and wooden fronts, stone paving, distant green hills and a modest county gateway, a few baskets and awnings. No people, no modern streets, no palace grandeur, no readable shop signs.\nLandscape 16:9, eye-level wide shot, fixed background for a text-driven game. Keep corners low-contrast enough for overlays, focus detail in the middle/lower field. Architectural coherence and readable interiors. No people baked into backgrounds, no UI, no writing, no watermarks, no collage. Entire image should be this one scene."
+      }
+    },
+    {
+      "id": "school-courtyard",
+      "name": "知微私塾",
+      "category": "scenes",
+      "path": "scenes/school-courtyard.png",
+      "width": 1672,
+      "height": 941,
+      "binding": {
+        "locationId": "school",
+        "sceneCode": null
+      },
+      "source": {
+        "kind": "ai-generated",
+        "tool": "image_gen",
+        "references": [
+          {
+            "assetId": "home-courtyard",
+            "use": "art-style"
+          }
+        ],
+        "prompt": "Use case: historical-scene. Create ONE standalone finished game background.\nThe supplied image is a STYLE REFERENCE ONLY: match its hand-painted ink-and-gouache finish, natural perspective, warm cream plaster, muted jade, aged dark wood, detailed but calm Ming Guangdong environment. Do not copy its courtyard composition.\nNew scene: The small entrance courtyard of Zhiwei private elementary school in Ming Guangdong: one-storey tiled timber lecture hall straight ahead, a smaller library room to one side, two stone steps, a slender tree and bamboo, a modest entrance gate. Quiet place for neighborhood children, distinct from a university or Confucian temple. No people, no written plaques.\nLandscape 16:9, eye-level wide shot, fixed background for a text-driven game. Keep corners low-contrast enough for overlays, focus detail in the middle/lower field. Architectural coherence and readable interiors. No people baked into backgrounds, no UI, no writing, no watermarks, no collage. Entire image should be this one scene."
+      }
+    },
+    {
+      "id": "bookshop",
+      "name": "陆记书铺",
+      "category": "scenes",
+      "path": "scenes/bookshop.png",
+      "width": 1672,
+      "height": 941,
+      "binding": {
+        "locationId": "bookshop",
+        "sceneCode": "SCENE_JISHI"
+      },
+      "source": {
+        "kind": "ai-generated",
+        "tool": "image_gen",
+        "references": [
+          {
+            "assetId": "home-courtyard",
+            "use": "art-style"
+          }
+        ],
+        "prompt": "Use case: historical-scene. Create ONE standalone finished game background.\nThe supplied image is a STYLE REFERENCE ONLY: match its hand-painted ink-and-gouache finish, natural perspective, warm cream plaster, muted jade, aged dark wood, detailed but calm Ming Guangdong environment. Do not copy its courtyard composition.\nNew scene: A small Ming Chinese county-town bookshop at the edge of a market, view from the shaded open shop front toward an old wooden counter, neatly stacked thread-bound books in indigo and ochre covers, wrapped bundles, a little shelf and bamboo awning. No seller or other people, no modern books, no readable letters on the covers or signs.\nLandscape 16:9, eye-level wide shot, fixed background for a text-driven game. Keep corners low-contrast enough for overlays, focus detail in the middle/lower field. Architectural coherence and readable interiors. No people baked into backgrounds, no UI, no writing, no watermarks, no collage. Entire image should be this one scene."
+      }
+    },
+    {
+      "id": "county-exam",
+      "name": "县试考场",
+      "category": "scenes",
+      "path": "scenes/county-exam.png",
+      "width": 1672,
+      "height": 941,
+      "binding": {
+        "screen": "county-exam",
+        "sceneCode": "SCENE_XIANSHI"
+      },
+      "source": {
+        "kind": "ai-generated",
+        "tool": "image_gen",
+        "references": [
+          {
+            "assetId": "home-courtyard",
+            "use": "art-style"
+          }
+        ],
+        "prompt": "Use case: historical-scene. Create ONE standalone finished game background.\nThe supplied image is a STYLE REFERENCE ONLY: match its hand-painted ink-and-gouache finish, natural perspective, warm cream plaster, muted jade, aged dark wood, detailed but calm Ming Guangdong environment. Do not copy its courtyard composition.\nNew scene: A modest Ming Chinese county examination hall prepared for a county-level entrance examination: orderly rows of simple individual wooden desks under timber roof beams, a raised examiner's desk at far end, paper and brushes ready, light through open side doors. Solemn but not gigantic imperial palace, no people, no readable calligraphy or UI.\nLandscape 16:9, eye-level wide shot, fixed background for a text-driven game. Keep corners low-contrast enough for overlays, focus detail in the middle/lower field. Architectural coherence and readable interiors. No people baked into backgrounds, no UI, no writing, no watermarks, no collage. Entire image should be this one scene."
+      }
+    },
+    {
+      "id": "dou-bao",
+      "name": "窦苞",
+      "category": "characters",
+      "path": "characters/dou-bao.png",
+      "width": 1254,
+      "height": 1254,
+      "binding": {
+        "npcCode": "NPC_XIANSHENG",
+        "locationId": "classroom"
+      },
+      "source": {
+        "kind": "ai-generated",
+        "tool": "image_gen",
+        "references": [
+          {
+            "referenceId": "doubao-avatar",
+            "use": "appearance"
+          },
+          {
+            "assetId": "home-courtyard",
+            "use": "art-style"
+          }
+        ],
+        "prompt": "Use case: character-design-reference-edit. Create ONE finished square NPC half-body portrait for a Ming-era Chinese life-simulation game.\nReference image 1 is the requested Doubao character appearance: preserve its most recognizable visual identity — sleek chin-length very dark brown bob, side-parted curved fringe, large warm dark eyes, rounded friendly face, gentle closed-mouth smile. She is an adult female schoolteacher named Dou Bao (窦苞); make her clearly a young adult, not a child.\nReference image 2 is the game's rendering and color style, ONLY: soft ink-and-gouache illustration, warm ivory paper, muted jade and natural cloth colors, subtly hand-painted texture.\nChange the modern black buttoned T-shirt to a restrained Ming-inspired female teacher outfit: pale jade green cross-collar upper robe closing to her right with an ivory inner collar, generous but practical long sleeves, a glimpse of an unpatterned cream skirt and a simple cloth sash. No palace jewelry, no imperial/court insignia, no fantasy armor. Her recognizable short bob stays short; do not replace it with a long-haired bun.\nThree-quarter view from waist up; hold one closed indigo thread-bound book with a blank paper label neatly in both hands. Calm, approachable, a hint of wit, competent educator. Balance the appealing stylized face of reference 1 with the painted finish of reference 2. Plain warm ivory background, subtle pale circular watercolor wash, generous safe margins for an avatar crop. No lettering, no logos, no watermark, no interface, no collage, no extra people. Entire final image is this one portrait."
+      }
+    },
+    {
+      "id": "shen-yan",
+      "name": "沈砚",
+      "category": "characters",
+      "path": "characters/shen-yan.png",
+      "width": 1254,
+      "height": 1254,
+      "binding": {
+        "npcCode": "NPC_GUANSHU",
+        "locationId": "library"
+      },
+      "source": {
+        "kind": "ai-generated",
+        "tool": "image_gen",
+        "references": [
+          {
+            "assetId": "home-courtyard",
+            "use": "art-style"
+          },
+          {
+            "assetId": "dou-bao",
+            "use": "portrait-style"
+          }
+        ],
+        "prompt": "Use case: character-design. Create ONE finished standalone game asset.\nReference 1 is the game environment art style, not the composition. Reference 2 is the approved teacher portrait, for the SAME painted finish and stylized adult character design language only. Do not copy her face or bob haircut.\nArt direction: refined ink-and-gouache, soft warm ivory paper texture, muted jade, indigo and warm wood colors; gentle convincing light, understated historical costume and materials, no photorealistic rendering.\nSubject: Original fictional NPC Shen Yan, an adult Chinese MAN who looks after a small private school's books in mid-1500s Ming Guangdong. Gentle, observant and scholarly face, a little older-looking than the female tutor, dark hair gathered under a simple cloth scholar cap, no extravagant official hat, understated dark slate-blue crossed-collar robe with tan accents. Half-body portrait holding a tied bundle of thread-bound books with natural hands, kind reserved expression. This is an ordinary book keeper, not a mandarin official or warrior. Square composition, centered face and upper body, complete head with generous margins, plain warm ivory painted background suitable for a character panel.\nNo text, no name labels, no logos, no watermark, no UI, no collage. Entire image is the one requested portrait."
+      }
+    },
+    {
+      "id": "threadbound-book",
+      "name": "线装书通用图",
+      "category": "equipment",
+      "path": "equipment/threadbound-book.png",
+      "width": 1254,
+      "height": 1254,
+      "binding": {
+        "purpose": "book-fallback"
+      },
+      "source": {
+        "kind": "ai-generated",
+        "tool": "image_gen",
+        "references": [
+          {
+            "assetId": "home-courtyard",
+            "use": "art-style"
+          }
+        ],
+        "prompt": "Use case: game-inventory-item. Create ONE finished standalone game asset.\nReference 1 is the game environment art style, not the composition. \nArt direction: refined ink-and-gouache, soft warm ivory paper texture, muted jade, indigo and warm wood colors; gentle convincing light, understated historical costume and materials, no photorealistic rendering.\nSubject: One isolated traditional Chinese Ming-era thread-bound book as a reusable inventory item illustration. Three-quarter view of a closed indigo cloth-and-paper book, ivory pages, visible stitched binding, one blank pale rectangular title slip without any characters, modest warm wear, no readable writing. Centered square composition with broad clean warm ivory background, the book occupies about 65 percent of the frame and is fully visible with a small soft painted shadow. No hands or people. One book only, no UI card frame, no other objects.\nNo text, no name labels, no logos, no watermark, no UI, no collage. Entire image is the one requested object."
+      }
+    },
+    {
+      "id": "default-avatar",
+      "name": "默认人物头像",
+      "category": "characters",
+      "path": "characters/default-avatar.svg",
+      "width": 256,
+      "height": 256,
+      "binding": {
+        "purpose": "character-fallback"
+      },
+      "source": {
+        "kind": "authored-svg"
+      }
+    }
+  ]
+}

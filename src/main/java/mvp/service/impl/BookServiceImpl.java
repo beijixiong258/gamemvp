@@ -61,7 +61,6 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
     private final EquipmentRecordService equipmentRecordService;
     private final BookRecordService bookRecordService;
 
-    /** {@inheritDoc} */
     @Override
     public void importDefinitions() {
         JSONArray equipmentDefinitions = jsonLoader.load("game/equipment.json", JSONObject.class)
@@ -110,7 +109,6 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
         }
     }
 
-    /** {@inheritDoc} */
     @Override
     public List<LibraryBook> listLibrary(
             GameSave save, String characterId, CharacterState character, ScholarState scholar
@@ -121,7 +119,6 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
                 .toList();
     }
 
-    /** {@inheritDoc} */
     @Override
     public BookActionResult read(
             GameSave save, String characterId, CharacterState character,
@@ -130,7 +127,6 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
         return settleBook(save, characterId, character, scholar, bookCode, settlementTurnNumber, null);
     }
 
-    /** {@inheritDoc} */
     @Override
     public BookActionResult readAsPlayer(
             GameSave save, String characterId, CharacterState character,
@@ -175,7 +171,6 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
         return new BookActionResult(description.bookName(), settlement);
     }
 
-    /** {@inheritDoc} */
     @Override
     public LibraryBook requirePlayerReadingBook(GameSave save, String characterId, CharacterState character,
                                                ScholarState scholar, String bookCode) {
@@ -198,7 +193,6 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
         }
     }
 
-    /** {@inheritDoc} */
     @Override
     public String generatePlayerReadingQuestion(LibraryBook book, String characterContext) {
         JSONObject facts = new JSONObject().set("bookName", book.bookName())
@@ -212,7 +206,6 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
         return output.question().strip();
     }
 
-    /** {@inheritDoc} */
     @Override
     public PlayerReadingEvaluation evaluatePlayerReading(LibraryBook book, String question, String text) {
         JSONObject facts = new JSONObject().set("bookName", book.bookName())
@@ -231,8 +224,6 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
     /**
      * 一次读取书目关联数据，供列表展示和实际阅读共用。
      *
-     * @param save 当前存档
-     * @param characterId 行动人物ID
      * @return 人物年龄、书目、装备定义、个人进度和持有数量
      */
     private LibraryContext loadLibrary(GameSave save, String characterId) {
@@ -263,9 +254,6 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
     /**
      * 按装备定义汇总人物背包数量，同名物品的多条获取记录可叠加。
      *
-     * @param saveId 存档ID
-     * @param characterId 人物ID
-     * @param turnNumber 当前总回合编号
      * @return 装备定义ID与持有数量
      */
     private Map<String, Integer> ownedQuantities(String saveId, String characterId, long turnNumber) {
@@ -281,10 +269,6 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
     /**
      * 根据阅读条件构造书籍展示，学识按实际进度连续计算。
      *
-     * @param book 书籍规则
-     * @param save 当前存档
-     * @param character 当前人物状态
-     * @param scholar 当前书生领域能力
      * @param context 当前书目和人物阅读记录
      * @return 阅读状态、全部限制原因和当前知识摘要
      */
@@ -402,7 +386,6 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
         };
     }
 
-    /** {@inheritDoc} */
     @Override
     public BigDecimal totalKnowledge(String characterId) {
         Map<String, Book> books = list().stream().collect(Collectors.toMap(Book::getEquipmentId, Function.identity()));

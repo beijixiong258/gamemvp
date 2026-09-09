@@ -44,7 +44,6 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
     private final CharacterEngine characterEngine;
     private final PlatformTransactionManager transactionManager;
 
-    /** {@inheritDoc} */
     @Override
     @Transactional
     public JSONObject start(String saveId, String actorId, StartDialogueCommand command) {
@@ -58,6 +57,10 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
             return previous;
         }
         GameSaveService.ActionContext context = gameSaveService.prepareAction(saveId, actorId, command.sceneCode());
+        JSONObject scene = JSONUtil.parseObj(context.contextSummary()).getJSONObject("scene");
+        if (!scene.getJSONArray("availableActionCode").contains("NPC_DIALOGUE")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前场景不能发起对话");
+        }
         Character counterpart = characterService.getById(command.counterpartId());
         if (counterpart == null || !Objects.equals(saveId, counterpart.getSaveId())
                 || !Boolean.TRUE.equals(counterpart.getEnabled()) || Objects.equals(actorId, counterpart.getId())) {
@@ -82,7 +85,6 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
         return result;
     }
 
-    /** {@inheritDoc} */
     @Override
     public JSONObject respond(String saveId, String dialogueId, DialogueCommand command) {
         if (command == null || command.requestId() == null || command.requestId().length() > 100
@@ -146,7 +148,6 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
         });
     }
 
-    /** {@inheritDoc} */
     @Override
     public DialogueRecord loadDialogue(String saveId, String dialogueId) {
         DialogueRecord dialogue = getById(dialogueId);

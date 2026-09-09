@@ -78,9 +78,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
     private Map<String, JSONObject> actions;
     private Map<String, String> feedbackTemplates;
 
-    /**
-     * 加载行动路由和确定性反馈模板，不访问数据库。
-     */
+    /** 加载行动路由和确定性反馈模板，不访问数据库。 */
     @PostConstruct
     private void loadActionRules() {
         Map<String, JSONObject> loadedActions = new HashMap<>();
@@ -98,17 +96,11 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         feedbackTemplates = Map.copyOf(loadedTemplates);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public List<Region> listBirthRegions() {
         return regionService.listMvpBirthRegions();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     @Transactional
     public StartLifeResult startLife(StartLifeCommand command) {
@@ -130,19 +122,10 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         CharacterEngine.StartLifeResult characterResult = characterEngine.startLife(birthRegion.getId());
         TurnEngine.TurnState turnState = turnEngine.startLife();
 
-        GameSave gameSave = new GameSave()
-                .setCreatedAt(LocalDateTime.now())
-                .setStatus(turnState.status())
-                .setBirthYear(turnState.birthYear())
-                .setCurrentYear(turnState.currentYear())
-                .setCurrentMonth(turnState.currentMonth())
-                .setTurnInMonth(turnState.turnInMonth())
-                .setAge(turnState.age())
-                .setTotalTurnNumber(turnState.totalTurnNumber())
-                .setGrowthStage(turnState.growthStage());
+        GameSave gameSave = new GameSave().setCreatedAt(LocalDateTime.now());
+        applyTurnState(gameSave, turnState);
         save(gameSave);
 
-        CharacterEngine.CharacterState characterState = characterResult.character();
         Character character = new Character()
                 .setSaveId(gameSave.getId())
                 .setName(characterName)
@@ -150,16 +133,10 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
                 .setWallet(GameRuleConstant.INITIAL_WALLET).setSickTurnsRemaining(0).setTitlesJson("[]")
                 .setBirthRegionId(characterResult.birthRegionId())
                 .setCurrentRegionId(characterResult.currentRegionId())
-                .setCharacterZhili(characterState.characterZhili())
-                .setCharacterDaode(characterState.characterDaode())
-                .setCharacterZhengzhi(characterState.characterZhengzhi())
-                .setCharacterJiaoji(characterState.characterJiaoji())
-                .setCharacterTineng(characterState.characterTineng())
-                .setCharacterJiankang(characterState.characterJiankang())
-                .setCharacterPilao(characterState.characterPilao())
                 .setBirthday(turnState.birthYear() + "-01-01")
                 .setAvailableStageCodeJson(INITIAL_AVAILABLE_STAGE_JSON)
                 .setEnabled(true);
+        applyCharacterState(character, characterResult.character());
         characterService.save(character);
 
         FamilyBackground familyBackground = new FamilyBackground()
@@ -172,12 +149,8 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         CareerProfileShusheng scholarProfile = new CareerProfileShusheng()
                 .setCharacterId(character.getId())
                 .setUnlockTurnNumber(turnState.totalTurnNumber())
-                .setLastActiveTurnNumber(turnState.totalTurnNumber())
-                .setAbilityShizi(scholarState.abilityShizi())
-                .setAbilityJingyi(scholarState.abilityJingyi())
-                .setAbilityWenzhang(scholarState.abilityWenzhang())
-                .setAbilityCelun(scholarState.abilityCelun())
-                .setAbilityWenxue(scholarState.abilityWenxue());
+                .setLastActiveTurnNumber(turnState.totalTurnNumber());
+        applyScholarState(scholarProfile, scholarState);
         careerProfileShushengService.save(scholarProfile);
         bookService.importDefinitions();
         createNpcs(gameSave, character, scholarState);
@@ -190,18 +163,12 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         );
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     @Transactional(readOnly = true)
     public SaveDetail loadDetail(String saveId) {
         return buildDetail(loadPlayer(saveId, false));
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     @Transactional(readOnly = true)
     public List<LibraryBook> listBooks(String saveId) {
@@ -212,7 +179,6 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         );
     }
 
-    /** {@inheritDoc} */
     @Override
     public JSONObject preparePlayerReading(String saveId, String bookCode, PlayerReadingQuestionCommand command) {
         if (command == null) {
@@ -245,7 +211,6 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         });
     }
 
-    /** {@inheritDoc} */
     @Override
     public JSONObject completePlayerReading(String saveId, String bookCode, PlayerReadingAnswerCommand command) {
         if (command == null || command.questionId() == null || !command.questionId().startsWith(BOOK_QUESTION_PREFIX)
@@ -334,8 +299,11 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         LibraryBook book = bookService.requirePlayerReadingBook(context.save(), context.character().getId(),
                 character, scholar, bookCode);
         String characterContext = new JSONObject().set("name", context.character().getName())
-                .set("age", context.save().getCurrentYear() - LocalDate.parse(context.character().getBirthday()).getYear())
-                .set("character", character).set("scholar", scholar).toString();
+                .set("age", actorAge(context))
+                .set("character", character).set("scholar", scholar)
+                .set("scene", requireScene(sceneCode, context.character(), "READ_BOOK_PLAYER"))
+                .set("teacher", characterService.lambdaQuery().eq(Character::getSaveId, context.save().getId())
+                        .eq(Character::getNpcCode, "NPC_XIANSHENG").eq(Character::getEnabled, true).one()).toString();
         return new PlayerReadingAttempt(context.character().getId(), expectedTurnNumber, sceneCode,
                 character, scholar, book, characterContext);
     }
@@ -362,16 +330,12 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         return question;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     @Transactional
     public JSONObject executeFixedAction(String saveId, FixedActionCommand command) {
         return executeCharacterAction(saveId, null, command);
     }
 
-    /** {@inheritDoc} */
     @Override
     @Transactional
     public JSONObject executeCharacterAction(String saveId, String actorId, FixedActionCommand command) {
@@ -411,6 +375,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         if (!action.getJSONArray("availableSceneCode").contains(command.sceneCode())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前场景不能执行该行动");
         }
+        requireScene(command.sceneCode(), context.character(), command.actionCode());
 
         CharacterState characterBefore = characterState(context.character());
         ScholarState scholarBefore = scholarState(context.scholar());
@@ -508,7 +473,6 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         return result;
     }
 
-    /** {@inheritDoc} */
     @Override
     public ExamRecord prepareExamThought(String saveId, String examId) {
         ExamAttempt before = prepareExamAttempt(saveId, null, examId);
@@ -519,13 +483,11 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         });
     }
 
-    /** {@inheritDoc} */
     @Override
     public ExamResult completeAutoExam(String saveId, String examId) {
         return completeCharacterExam(saveId, null, examId);
     }
 
-    /** {@inheritDoc} */
     @Override
     public ExamResult completeCharacterExam(String saveId, String actorId, String examId) {
         ExamAttempt before = prepareExamAttempt(saveId, actorId, examId);
@@ -538,7 +500,6 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         });
     }
 
-    /** {@inheritDoc} */
     @Override
     public JSONObject completePlayerExam(String saveId, String examId, PlayerExamCommand command) {
         if (command == null || command.text() == null || command.text().isBlank() || command.text().length() > 8000) {
@@ -585,7 +546,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
                     .toList();
             String facts = new JSONObject().set("characterName", context.character().getName())
                     .set("currentYear", context.save().getCurrentYear())
-                    .set("age", context.save().getCurrentYear() - LocalDate.parse(context.character().getBirthday()).getYear())
+                    .set("age", actorAge(context))
                     .set("character", character).set("scholar", scholar).set("learnedBooks", learnedBooks).toString();
             return new ExamAttempt(exam, facts);
         });
@@ -616,7 +577,6 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
     /**
      * 加载存档及其玩家、书生档案；写入时先锁定存档行，使同一存档的结算串行执行。
      *
-     * @param saveId 存档ID
      * @param forUpdate 是否在当前事务内取得存档行锁
      * @return 本次请求共用的持久化对象
      */
@@ -627,7 +587,6 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
     /**
      * 按同一套规则加载玩家或NPC及其书生档案。
      *
-     * @param saveId 存档ID
      * @param actorId 行动人物ID，空时选择玩家
      * @param forUpdate 是否在当前事务内锁定存档
      * @return 本次行动的人物、领域与存档上下文
@@ -690,7 +649,6 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
      * 保存已经结算成立的人生节点，普通回合不调用此方法。
      *
      * @param context 已更新为行动后状态的上下文
-     * @param eventCode 节点编码
      * @param summary 由规则或模板产生的事实摘要
      * @param settlement 已完成的数值结算，不包含模型推测
      */
@@ -716,6 +674,10 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
             template = template.replace("{{" + entry.getKey() + "}}", entry.getValue());
         }
         return template;
+    }
+
+    private int actorAge(ActorContext context) {
+        return context.save().getCurrentYear() - LocalDate.parse(context.character().getBirthday()).getYear();
     }
 
     private CharacterState characterState(Character character) {
@@ -780,7 +742,6 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         );
     }
 
-    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
     public List<SaveSummary> listSaves() {
@@ -799,7 +760,6 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         }).toList();
     }
 
-    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
     public ActionContext prepareAction(String saveId, String actorId, String sceneCode) {
@@ -808,15 +768,11 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
                 || context.character().getSickTurnsRemaining() > 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "请先完成考试或重病休养");
         }
-        JSONObject scene = jsonLoader.load("game/scene.json", JSONObject.class).getJSONArray("scene")
-                .toList(JSONObject.class).stream().filter(value -> Objects.equals(sceneCode, value.getStr("sceneCode")))
-                .findFirst().orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "场景不存在"));
-        if (!scene.getJSONArray("availableActionCode").contains("FREE_ACTION")) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "当前场景不能自由行动或对话");
-        }
+        JSONObject scene = requireScene(sceneCode, context.character(), "FREE_ACTION");
+        List<String> presentNpcCodes = scene.getJSONArray("availableNpcCode").toList(String.class);
         CharacterState character = characterState(context.character());
         ScholarState scholar = scholarState(context.scholar());
-        int actorAge = context.save().getCurrentYear() - LocalDate.parse(context.character().getBirthday()).getYear();
+        int actorAge = actorAge(context);
         JSONObject calendar = new JSONObject().set("currentYear", context.save().getCurrentYear())
                 .set("currentMonth", context.save().getCurrentMonth()).set("turnInMonth", context.save().getTurnInMonth())
                 .set("totalTurnNumber", context.save().getTotalTurnNumber());
@@ -827,13 +783,13 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
                 .set("scene", scene)
                 .set("books", bookService.listLibrary(context.save(), context.character().getId(),
                         character, scholar))
-                .set("npcs", characterService.lambdaQuery().eq(Character::getSaveId, saveId)
-                        .eq(Character::getType, 0).eq(Character::getEnabled, true).list()).toString();
+                .set("npcs", presentNpcCodes.isEmpty() ? List.of() : characterService.lambdaQuery()
+                        .eq(Character::getSaveId, saveId).eq(Character::getType, 0)
+                        .eq(Character::getEnabled, true).in(Character::getNpcCode, presentNpcCodes).list()).toString();
         return new ActionContext(saveId, context.character().getId(), context.save().getTotalTurnNumber(), sceneCode,
                 character, scholar, facts);
     }
 
-    /** {@inheritDoc} */
     @Override
     public JSONObject executeFreeAction(String saveId, String actorId, FreeActionCommand command) {
         if (command == null || command.text() == null || command.text().isBlank()
@@ -859,7 +815,6 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
                 payload, resolved.settlement(), resolved.acquisitions(), true, resolved.eventSummary(), resolved.lifeMilestone()));
     }
 
-    /** {@inheritDoc} */
     @Override
     @Transactional
     public JSONObject settleAiAction(ActionContext before, String requestId, Object payload, DriverResult settlement,
@@ -924,8 +879,21 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
     private void createNpcs(GameSave gameSave, Character player, ScholarState initialScholar) {
         for (JSONObject definition : jsonLoader.load("game/npc.json", JSONObject.class)
                 .getJSONArray("npc").toList(JSONObject.class)) {
-            if (characterService.lambdaQuery().eq(Character::getSaveId, gameSave.getId())
-                    .eq(Character::getNpcCode, definition.getStr("npcCode")).exists()) {
+            Character existing = characterService.lambdaQuery().eq(Character::getSaveId, gameSave.getId())
+                    .eq(Character::getNpcCode, definition.getStr("npcCode")).one();
+            if (existing != null) {
+                // 仅替换旧模板身份，保留已有钱包、能力、记忆和自定义姓名。
+                String legacyName = switch (definition.getStr("npcCode")) {
+                    case "NPC_XIANSHENG" -> "私塾先生";
+                    case "NPC_JIAHAO" -> "隔壁班嘉豪";
+                    case "NPC_SHANGREN" -> "书商陆掌柜";
+                    default -> null;
+                };
+                if (legacyName != null && legacyName.equals(existing.getName())) {
+                    existing.setName(definition.getStr("displayName"))
+                            .setPersonalitySummary(definition.getStr("personalitySummary"));
+                    characterService.updateById(existing);
+                }
                 continue;
             }
             Character npc = JSONUtil.toBean(JSONUtil.toJsonStr(player), Character.class)
@@ -938,11 +906,10 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
             applyCharacterState(npc, characterEngine.startLife(player.getBirthRegionId()).character());
             npc.setCurrentState(null);
             characterService.save(npc);
-            careerProfileShushengService.save(new CareerProfileShusheng().setCharacterId(npc.getId())
-                    .setUnlockTurnNumber(0L).setLastActiveTurnNumber(null)
-                    .setAbilityShizi(initialScholar.abilityShizi()).setAbilityJingyi(initialScholar.abilityJingyi())
-                    .setAbilityWenzhang(initialScholar.abilityWenzhang()).setAbilityCelun(initialScholar.abilityCelun())
-                    .setAbilityWenxue(initialScholar.abilityWenxue()));
+            CareerProfileShusheng scholar = new CareerProfileShusheng().setCharacterId(npc.getId())
+                    .setUnlockTurnNumber(0L).setLastActiveTurnNumber(null);
+            applyScholarState(scholar, initialScholar);
+            careerProfileShushengService.save(scholar);
         }
     }
 
@@ -994,7 +961,21 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         }
     }
 
-    /** {@inheritDoc} */
+    /** 同时检查场景的行动许可及NPC行动者的在场关系，玩家可通过界面切换房间。 */
+    private JSONObject requireScene(String sceneCode, Character actor, String actionCode) {
+        JSONObject scene = jsonLoader.load("game/scene.json", JSONObject.class).getJSONArray("scene")
+                .toList(JSONObject.class).stream()
+                .filter(value -> Objects.equals(sceneCode, value.getStr("sceneCode"))).findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "场景不存在"));
+        if (!scene.getJSONArray("availableActionCode").contains(actionCode)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前场景不能执行该行动");
+        }
+        if (actor.getType() == 0 && !scene.getJSONArray("availableNpcCode").contains(actor.getNpcCode())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "行动人物不在当前场景");
+        }
+        return scene;
+    }
+
     @Override
     @Transactional
     public void prepareContent(String saveId) {

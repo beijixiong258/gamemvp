@@ -4,7 +4,7 @@
       "examType": "EXAM_MENGXUE",
       "examName": "蒙学阶段考",
       "triggerAge": 8,
-      "sceneCode": "SCENE_SISHU",
+      "sceneCode": "SCENE_SISHU_JIANGTANG",
       "finalExam": false,
       "question": [
         {
@@ -37,7 +37,7 @@
       "examType": "EXAM_JINGYI",
       "examName": "经义阶段考",
       "triggerAge": 12,
-      "sceneCode": "SCENE_SISHU",
+      "sceneCode": "SCENE_SISHU_JIANGTANG",
       "finalExam": false,
       "question": [
         {
@@ -70,7 +70,7 @@
       "examType": "EXAM_PRE_COUNTY",
       "examName": "县试预考",
       "triggerAge": 15,
-      "sceneCode": "SCENE_SISHU",
+      "sceneCode": "SCENE_SISHU_JIANGTANG",
       "finalExam": false,
       "question": [
         {

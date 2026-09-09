@@ -40,7 +40,6 @@ public interface GameSaveService extends IService<GameSave> {
     /**
      * 读取可继续游玩的存档，包括书库、考试和人生节点，不推进时间。
      *
-     * @param saveId 存档ID
      * @return 当前存档完整状态
      */
     SaveDetail loadDetail(String saveId);
@@ -48,7 +47,6 @@ public interface GameSaveService extends IService<GameSave> {
     /**
      * 读取全部书目及当前人物的阅读条件、进度和学识贡献。
      *
-     * @param saveId 存档ID
      * @return 按书籍编码排列的书库
      */
     List<LibraryBook> listBooks(String saveId);
@@ -62,7 +60,6 @@ public interface GameSaveService extends IService<GameSave> {
     /**
      * 结算一次固定行动，并在同一事务中保存数值、日历及触发的考试。
      *
-     * @param saveId 存档ID
      * @param command 稳定请求编号、行动、场景、可选书籍及预期累计回合
      * @return 行动后的存档、实际变化、骰点和反馈；重传返回原结果
      */
@@ -71,7 +68,6 @@ public interface GameSaveService extends IService<GameSave> {
     /**
      * 按考试快照计分并生成系统代行答卷与总结，阶段考试恢复求学，县试结束本局。
      *
-     * @param saveId 存档ID
      * @param examId 已触发的考试记录ID
      * @return 成绩、更新后的存档及是否为首次结算
      */
@@ -94,7 +90,8 @@ public interface GameSaveService extends IService<GameSave> {
     List<SaveSummary> listSaves();
 
     /**
-     * 显式补齐存档缺失的NPC和公共教材定义，不发放物品或覆盖已有定义。
+     * 补齐存档缺失的NPC和公共教材定义，并更新旧NPC模板的默认称呼与身份。
+     * 不发放物品、不覆盖公共装备定义，不改写人物成长数据、自定义姓名或历史记忆。
      *
      * @param saveId 已完成表结构升级的存档ID
      */
@@ -103,7 +100,6 @@ public interface GameSaveService extends IService<GameSave> {
     /**
      * 玩家与NPC共用的固定行动结算入口。
      *
-     * @param saveId 存档ID
      * @param actorId 行动人物ID，空时使用玩家
      * @param command 稳定请求编号、行动参数与预期回合
      * @return 已保存的结算结果
@@ -113,7 +109,6 @@ public interface GameSaveService extends IService<GameSave> {
     /**
      * 使用指定人物的考试快照完成系统代行；只有玩家考试可以切换存档阶段或结束本局。
      *
-     * @param saveId 存档ID
      * @param actorId 应考人物ID，空时使用玩家
      * @param examId 已触发的考试ID
      * @return 考试成绩与最新存档
@@ -123,9 +118,7 @@ public interface GameSaveService extends IService<GameSave> {
     /**
      * 为自由行动或对话读取日期、行动者年龄与能力、玩家初始家庭背景及场景事实。
      *
-     * @param saveId 存档ID
      * @param actorId 玩家或NPC的ID
-     * @param sceneCode 当前行动场景
      * @return 模型调用前的只读数值快照和事实JSON，家庭背景不代表NPC背景或人物钱包
      */
     ActionContext prepareAction(String saveId, String actorId, String sceneCode);
@@ -133,7 +126,6 @@ public interface GameSaveService extends IService<GameSave> {
     /**
      * 在事务外运行自由行动图，再核对快照并保存实际结果。
      *
-     * @param saveId 存档ID
      * @param actorId 玩家或NPC的ID
      * @param command 原文、场景、预期回合及稳定请求编号
      * @return 已保存的自由行动结果
@@ -143,9 +135,7 @@ public interface GameSaveService extends IService<GameSave> {
     /**
      * 在短事务中核对模型调用前快照，保存属性、交易和可选的回合推进。
      *
-     * @param before 调用前快照
      * @param requestId 结算请求编号
-     * @param payload 原始业务参数
      * @param settlement 引擎计算结果，非结束对话时为空
      * @param acquisitions 本次明确执行的获取行为
      * @param endTurn 是否推进普通回合

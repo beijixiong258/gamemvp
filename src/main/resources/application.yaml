@@ -1,6 +1,6 @@
 spring:
   application:
-    name: mvp
+    name: 豪杰成长计划plus
 
   config:
     import: "optional:file:./.env[.properties]"

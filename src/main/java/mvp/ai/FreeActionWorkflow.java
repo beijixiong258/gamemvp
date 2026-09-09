@@ -91,7 +91,6 @@ public class FreeActionWorkflow {
     /**
      * 调用自由行动Resolver，把结构化输出写入图状态。
      *
-     * @param state 当前图状态
      * @return 只包含Resolver输出的局部状态更新
      */
     private Map<String, Object> resolveAction(FreeActionState state) {

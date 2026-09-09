@@ -3,7 +3,7 @@
     {
       "sceneCode": "SCENE_JIA",
       "sceneName": "家中",
-      "description": "玩家出生和休息的主要场景。",
+      "description": "旧版家中场景，保留历史对话与旧请求兼容；新界面使用具体房间。",
       "availableActionCode": [
         "REST",
         "FREE_ACTION",
@@ -16,8 +16,8 @@
     },
     {
       "sceneCode": "SCENE_SISHU",
-      "sceneName": "私塾",
-      "description": "玩家读书、练习文章、参加阶段考试和向先生或同窗请教的场景。",
+      "sceneName": "知微私塾",
+      "description": "旧版私塾场景，保留历史对话与旧请求兼容；新界面使用讲堂和藏书阁。",
       "availableActionCode": [
         "READ_BOOK",
         "READ_BOOK_PLAYER",
@@ -47,8 +47,8 @@
     },
     {
       "sceneCode": "SCENE_JISHI",
-      "sceneName": "集市书摊",
-      "description": "可以向书商购买进阶教材和来自未来的怪书。",
+      "sceneName": "陆记书铺",
+      "description": "县城书铺，可以向陆掌柜购买进阶教材和来自未来的怪书。",
       "availableActionCode": [
         "FREE_ACTION",
         "NPC_DIALOGUE",
@@ -56,6 +56,73 @@
       ],
       "availableNpcCode": [
         "NPC_SHANGREN"
+      ]
+    },
+    {
+      "sceneCode": "SCENE_JIA_WOSHI",
+      "sceneName": "家中·卧室",
+      "description": "玩家自己的卧室，可以休息和整理行装，没有常驻NPC。",
+      "availableActionCode": [
+        "REST",
+        "FREE_ACTION"
+      ],
+      "availableNpcCode": []
+    },
+    {
+      "sceneCode": "SCENE_JIA_SHUFANG",
+      "sceneName": "家中·书房",
+      "description": "家中的书房，父亲在此，可以阅读和谈论家庭、求学之事。",
+      "availableActionCode": [
+        "READ_BOOK",
+        "FREE_ACTION",
+        "NPC_DIALOGUE"
+      ],
+      "availableNpcCode": [
+        "NPC_FUQIN"
+      ]
+    },
+    {
+      "sceneCode": "SCENE_JIA_ZHUWO",
+      "sceneName": "家中·主卧",
+      "description": "父母的房间，母亲在此，关心孩子的健康与日常生活。",
+      "availableActionCode": [
+        "FREE_ACTION",
+        "NPC_DIALOGUE"
+      ],
+      "availableNpcCode": [
+        "NPC_MUQIN"
+      ]
+    },
+    {
+      "sceneCode": "SCENE_SISHU_JIANGTANG",
+      "sceneName": "知微私塾·讲堂",
+      "description": "启蒙私塾的讲堂，成年女塾师窦苞授课，同窗嘉豪在此。提供阅读、练习、体会评阅、免费教材和阶段考试。",
+      "availableActionCode": [
+        "READ_BOOK",
+        "READ_BOOK_PLAYER",
+        "PRACTICE_WRITING",
+        "FREE_ACTION",
+        "NPC_DIALOGUE",
+        "EXAM_AUTO",
+        "EXAM_PLAYER",
+        "ACQUIRE_EQUIPMENT"
+      ],
+      "availableNpcCode": [
+        "NPC_XIANSHENG",
+        "NPC_JIAHAO"
+      ]
+    },
+    {
+      "sceneCode": "SCENE_SISHU_CANGSHUGE",
+      "sceneName": "知微私塾·藏书阁",
+      "description": "知微私塾的藏书阁，管书人沈砚介绍书目和阅读条件，可以普通阅读。免费教材需到讲堂向窦苞领取，沈砚不能发书或免除门槛。",
+      "availableActionCode": [
+        "READ_BOOK",
+        "FREE_ACTION",
+        "NPC_DIALOGUE"
+      ],
+      "availableNpcCode": [
+        "NPC_GUANSHU"
       ]
     }
   ]

@@ -36,7 +36,6 @@ public class EquipmentRecordServiceImpl extends ServiceImpl<EquipmentRecordMappe
     private final EventRecordService eventRecordService;
     private final ClasspathJsonLoader jsonLoader;
 
-    /** {@inheritDoc} */
     @Override
     @Transactional
     public JSONObject acquire(String saveId, String actorId, AcquisitionCommand command) {
@@ -72,6 +71,8 @@ public class EquipmentRecordServiceImpl extends ServiceImpl<EquipmentRecordMappe
         boolean available = jsonLoader.load("game/scene.json", JSONObject.class).getJSONArray("scene")
                 .toList(JSONObject.class).stream().anyMatch(scene ->
                         Objects.equals(scene.getStr("sceneCode"), command.sceneCode())
+                                && scene.getJSONArray("availableActionCode").contains("ACQUIRE_EQUIPMENT")
+                                && (actor.getType() == 1 || scene.getJSONArray("availableNpcCode").contains(actor.getNpcCode()))
                                 && scene.getJSONArray("availableNpcCode").contains(command.supplierNpcCode()));
         Character supplier = characterService.lambdaQuery().eq(Character::getSaveId, saveId)
                 .eq(Character::getNpcCode, command.supplierNpcCode()).eq(Character::getEnabled, true).one();
@@ -101,7 +102,6 @@ public class EquipmentRecordServiceImpl extends ServiceImpl<EquipmentRecordMappe
         return result;
     }
 
-    /** {@inheritDoc} */
     @Override
     public List<InventoryItem> backpack(String saveId, String actorId) {
         Character actor = characterService.getById(actorId);

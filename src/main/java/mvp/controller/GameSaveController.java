@@ -67,7 +67,6 @@ public class GameSaveController {
     /**
      * 读取存档当前状态，用于刷新页面或继续游戏。
      *
-     * @param saveId 存档ID
      * @return 人物、领域档案、书籍、考试和人生节点
      */
     @GetMapping("/{saveId}")
