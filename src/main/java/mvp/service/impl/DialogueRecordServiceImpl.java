@@ -91,6 +91,9 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
                 || (!command.endDialogue() && (command.text() == null || command.text().isBlank()))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请填写消息及不超过100字符的稳定请求编号");
         }
+        if (command.text() != null && command.text().length() > 4000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "对话消息不能超过4000字符");
+        }
         JSONObject payload = new JSONObject().set("operation", "DIALOGUE_MESSAGE").set("dialogueId", dialogueId).set("command", command);
         JSONObject previous = eventRecordService.replay(saveId, command.requestId(), payload);
         if (previous != null) {

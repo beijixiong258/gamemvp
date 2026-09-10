@@ -796,12 +796,18 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
                 || command.requestId() == null || command.requestId().length() > 100) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请填写自定义行动及不超过100字符的请求编号");
         }
+        if (command.text().length() > 8000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "自定义行动不能超过8000字符");
+        }
         JSONObject payload = new JSONObject().set("operation", "FREE_ACTION").set("actorId", actorId).set("command", command);
         JSONObject previous = eventRecordService.replay(saveId, command.requestId(), payload);
         if (previous != null) {
             return previous;
         }
-        ActionContext before = prepareAction(saveId, actorId, command.sceneCode());
+        // 类内调用不会触发prepareAction的事务注解，显式保证多次查询使用同一读取事务。
+        TransactionTemplate readTransaction = new TransactionTemplate(transactionManager);
+        readTransaction.setReadOnly(true);
+        ActionContext before = readTransaction.execute(status -> prepareAction(saveId, actorId, command.sceneCode()));
         if (!Objects.equals(command.expectedTurnNumber(), before.turnNumber())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "回合已变化，请读档后重试");
         }

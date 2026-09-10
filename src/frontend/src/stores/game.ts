@@ -75,24 +75,26 @@ export const useGameStore = defineStore('game', () => {
     question.value = saved?.turnNumber === detail.value?.save.totalTurnNumber ? saved : null
     if (!question.value) writeLocal(key(id, 'question'), null)
   }
-  async function syncDetail() {
-    if (!detail.value) return
+  async function syncDetail(epoch: number) {
+    if (!detail.value || epoch !== readEpoch) return
     const id = detail.value.save.id
     const fresh = await request<SaveDetail>('/save/' + segment(id))
-    if (detail.value?.save.id !== id) return
+    if (epoch !== readEpoch || detail.value?.save.id !== id) return
     detail.value = fresh; stale.value = false
     restoreQuestion(id)
   }
-  async function syncDialogue() {
-    if (!detail.value) return
+  async function syncDialogue(epoch: number) {
+    if (!detail.value || epoch !== readEpoch) return
     const id = detail.value.save.id
     const dialogueId = readLocal<string | null>(key(id, 'dialogue'), null)
     if (!dialogueId) { dialogue.value = null; return }
+    const isCurrent = () => epoch === readEpoch && detail.value?.save.id === id
+      && readLocal<string | null>(key(id, 'dialogue'), null) === dialogueId
     try {
       const fresh = await request<Dialogue>('/dialogue/' + segment(id) + '/' + segment(dialogueId))
-      if (detail.value?.save.id === id) dialogue.value = fresh
+      if (isCurrent()) dialogue.value = fresh
     } catch (e) {
-      if (detail.value?.save.id !== id) return
+      if (!isCurrent()) return
       if (e instanceof ApiError && e.status === 404) {
         dialogue.value = null; writeLocal(key(id, 'dialogue'), null)
       } else throw e
@@ -113,7 +115,7 @@ export const useGameStore = defineStore('game', () => {
       if (epoch !== readEpoch) return
       detail.value = fresh
       restoreQuestion(id)
-      await syncDialogue()
+      await syncDialogue(epoch)
     } catch (e) { if (epoch === readEpoch) { error.value = message(e); stale.value = true } }
     finally { if (epoch === readEpoch) loading.value = false }
   }
@@ -122,7 +124,7 @@ export const useGameStore = defineStore('game', () => {
     if (!detail.value) return
     const epoch = ++readEpoch
     loading.value = true; error.value = ''
-    try { await syncDetail(); if (epoch === readEpoch) await syncDialogue() }
+    try { await syncDetail(epoch); if (epoch === readEpoch) await syncDialogue(epoch) }
     catch (e) { if (epoch === readEpoch) { error.value = message(e); stale.value = true } }
     finally { if (epoch === readEpoch) loading.value = false }
   }
@@ -133,6 +135,7 @@ export const useGameStore = defineStore('game', () => {
   async function retry() {
     if (!pending.value || busy.value || loading.value) return
     const operation = pending.value
+    const epoch = ++readEpoch
     busy.value = true; busyLabel.value = operation.label; error.value = ''; notice.value = ''
     let result: unknown
     try {
@@ -142,7 +145,7 @@ export const useGameStore = defineStore('game', () => {
       const status = e instanceof ApiError ? e.status : 0
       if (status >= 400 && status < 500 && status !== 408 && status !== 429) clearPending()
       if (status === 409) {
-        try { await syncDetail(); await syncDialogue() } catch { stale.value = true }
+        try { await syncDetail(epoch); await syncDialogue(epoch) } catch { if (epoch === readEpoch) stale.value = true }
       }
       busy.value = false
       return
@@ -167,9 +170,11 @@ export const useGameStore = defineStore('game', () => {
       || (operation.kind === 'acquire' ? '已取得《' + data.equipmentName + '》×' + data.quantity + '，花费 ' + data.cost + ' 文。'
         : operation.kind === 'question' ? '题目已备好，请写下你的体会。'
         : operation.kind === 'background' ? '童年往事已记下。' : operation.kind === 'thought' ? '思路已整理好。' : '')
-    try { await syncDetail() } catch (e) {
-      stale.value = true
-      error.value = '操作已完成，但最新进度读取失败。请刷新进度后继续。' + message(e)
+    try { await syncDetail(epoch) } catch (e) {
+      if (epoch === readEpoch) {
+        stale.value = true
+        error.value = '操作已完成，但最新进度读取失败。请刷新进度后继续。' + message(e)
+      }
     } finally { busy.value = false }
   }
   async function commit(kind: OperationKind, label: string, route: string, body?: Record<string, unknown>) {
