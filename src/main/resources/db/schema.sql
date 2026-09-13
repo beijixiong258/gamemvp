@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS `game_save`
     CONSTRAINT `chk_game_save_month`
         CHECK (`current_month` BETWEEN 1 AND 12),
     CONSTRAINT `chk_game_save_turn_in_month`
-        CHECK (`turn_in_month` BETWEEN 1 AND 4),
+        CHECK (`turn_in_month` BETWEEN 1 AND 3),
     CONSTRAINT `chk_game_save_age`
         CHECK (`age` >= 0),
     CONSTRAINT `chk_game_save_total_turn`
@@ -91,7 +91,12 @@ CREATE TABLE IF NOT EXISTS `game_character`
     `save_id`                   CHAR(32)     NOT NULL COMMENT '所属存档ID',
     `name`                      VARCHAR(64)  NOT NULL COMMENT '人物姓名',
     `type`                      TINYINT      NOT NULL COMMENT '控制类型：1为人类玩家，0为NPC',
-    `npc_code`                  VARCHAR(64)  NULL COMMENT 'NPC模板编码，玩家为空',
+    `npc_code`                  VARCHAR(64)  NULL COMMENT '固定NPC模板编码，玩家和动态NPC为空',
+    `retention_level`           VARCHAR(2)   NOT NULL DEFAULT 'L2' COMMENT 'L0临时、L1近期、L2长期身份',
+    `expires_at_turn`           BIGINT       NULL COMMENT '临时身份到期回合，L2为空',
+    `current_scene_code`        VARCHAR(64)  NULL COMMENT '动态NPC所在场景，固定NPC沿用场景配置',
+    `archived`                  TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '退出日常出场但保留身份和历史引用',
+    `retention_reason`          VARCHAR(500) NULL COMMENT '最近一次实际互动确认的身份保留依据',
     `wallet`                    INT          NOT NULL DEFAULT 2000 COMMENT '可支配资金，单位为文',
     `sick_turns_remaining`      INT          NOT NULL DEFAULT 0 COMMENT '重病待强制经过回合',
     `official_position`         VARCHAR(128) NULL COMMENT '当前官职',
@@ -117,6 +122,8 @@ CREATE TABLE IF NOT EXISTS `game_character`
     UNIQUE KEY `uk_game_character_save_npc` (`save_id`, `npc_code`),
     KEY `idx_game_character_save_type` (`save_id`, `type`),
     KEY `idx_game_character_save_enabled` (`save_id`, `enabled`),
+    KEY `idx_game_character_retention` (`save_id`, `type`, `archived`, `expires_at_turn`),
+    KEY `idx_game_character_scene` (`save_id`, `current_scene_code`, `type`, `archived`),
     KEY `idx_game_character_current_region` (`current_region_id`),
     CONSTRAINT `fk_game_character_save`
         FOREIGN KEY (`save_id`) REFERENCES `game_save` (`id`)
@@ -134,7 +141,13 @@ CREATE TABLE IF NOT EXISTS `game_character`
     CONSTRAINT `chk_game_character_fatigue`
         CHECK (`character_pilao` >= 0),
     CONSTRAINT `chk_game_character_enabled`
-        CHECK (`enabled` IN (0, 1))
+        CHECK (`enabled` IN (0, 1)),
+    CONSTRAINT `chk_game_character_retention`
+        CHECK ((`retention_level` = 'L2' AND `expires_at_turn` IS NULL AND `archived` = 0)
+            OR (`retention_level` IN ('L0', 'L1') AND `expires_at_turn` IS NOT NULL
+                AND `expires_at_turn` >= 0 AND `archived` IN (0, 1))),
+    CONSTRAINT `chk_game_character_permanent_identity`
+        CHECK ((`type` = 0 AND `npc_code` IS NULL) OR `retention_level` = 'L2')
 ) ENGINE = InnoDB
   DEFAULT CHARACTER SET = utf8mb4
   COLLATE = utf8mb4_unicode_ci
@@ -199,13 +212,16 @@ CREATE TABLE IF NOT EXISTS `equipment_definition`
     `price`          INT          NOT NULL COMMENT '价格，单位为文',
     `supplier_npc_code` VARCHAR(64) NOT NULL COMMENT '供应NPC模板编码',
     `description`    TEXT         NOT NULL COMMENT '基础介绍',
+    `use_effect_code` VARCHAR(32) NOT NULL DEFAULT 'NONE' COMMENT '道具固定使用效果：NONE或RELIEVE_FATIGUE',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_equipment_definition_code` (`equipment_code`),
     KEY `idx_equipment_definition_type_rarity` (`equipment_type`, `rarity_code`),
     CONSTRAINT `chk_equipment_definition_price`
         CHECK (`price` >= 0),
     CONSTRAINT `chk_equipment_definition_rarity`
-        CHECK (`rarity_code` IN ('COMMON', 'UNCOMMON', 'RARE', 'EPIC', 'LEGENDARY'))
+        CHECK (`rarity_code` IN ('COMMON', 'UNCOMMON', 'RARE', 'EPIC', 'LEGENDARY')),
+    CONSTRAINT `chk_equipment_definition_use_effect`
+        CHECK (`use_effect_code` IN ('NONE', 'RELIEVE_FATIGUE'))
 ) ENGINE = InnoDB
   DEFAULT CHARACTER SET = utf8mb4
   COLLATE = utf8mb4_unicode_ci
@@ -253,20 +269,31 @@ CREATE TABLE IF NOT EXISTS `book_definition`
 
 CREATE TABLE IF NOT EXISTS `character_equipment`
 (
-    `id`                     CHAR(32)    NOT NULL COMMENT '人物装备记录ID',
-    `save_id`                CHAR(32)    NOT NULL COMMENT '所属存档ID',
-    `character_id`           CHAR(32)    NOT NULL COMMENT '持有装备的人物ID',
-    `equipment_id`           CHAR(32)    NOT NULL COMMENT '装备定义ID',
-    `quantity`               INT         NOT NULL DEFAULT 1 COMMENT '本次取得数量，同种装备可多条',
-    `ai_text`                TEXT        NULL COMMENT 'AI生成的装备来源文字',
-    `acquired_turn_number`   BIGINT      NOT NULL COMMENT '本次实际取得装备时的总回合编号',
-    `status`                 VARCHAR(32) NOT NULL COMMENT '装备记录当前状态',
+    `id`                     CHAR(32)     NOT NULL COMMENT '存档内物品实例ID',
+    `save_id`                CHAR(32)     NOT NULL COMMENT '所属存档ID',
+    `character_id`           CHAR(32)     NULL COMMENT '持有人物ID，场景中的无主物件为空',
+    `equipment_id`           CHAR(32)     NULL COMMENT '公共装备定义ID，动态物件为空',
+    `scene_code`             VARCHAR(64)  NULL COMMENT '场景物件所在位置，已持有或消耗后为空',
+    `item_name`              VARCHAR(128) NULL COMMENT '动态物件名称，公共装备使用定义名称',
+    `item_description`       TEXT         NULL COMMENT '动态物件的已确认说明',
+    `quantity`               INT          NOT NULL DEFAULT 1 COMMENT '实例剩余数量，耗尽时为0',
+    `ai_text`                TEXT         NULL COMMENT 'AI生成的装备来源文字',
+    `acquired_turn_number`   BIGINT       NOT NULL COMMENT '本次创建或取得物品时的总回合编号',
+    `status`                 VARCHAR(32)  NOT NULL COMMENT 'SCENE场景物件、OWNED持有、CONSUMED耗尽',
+    `retention_level`        VARCHAR(2)   NOT NULL DEFAULT 'L2' COMMENT 'L0当场、L1近期、L2长期实例',
+    `expires_at_turn`        BIGINT       NULL COMMENT '场景物件到期回合，L2为空',
+    `last_reinforced_turn`   BIGINT       NOT NULL DEFAULT 0 COMMENT '最后一次实际交互强化的回合',
+    `archived`               TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '临时场景物件归档标记，不删除实例',
     PRIMARY KEY (`id`),
     KEY `idx_character_equipment_save` (`save_id`),
     KEY `idx_character_equipment_character_save` (`character_id`, `save_id`),
     KEY `idx_character_equipment_effective`
         (`character_id`, `equipment_id`, `status`),
     KEY `idx_character_equipment_definition` (`equipment_id`),
+    KEY `idx_character_equipment_scene` (`save_id`, `scene_code`, `status`, `archived`, `expires_at_turn`),
+    CONSTRAINT `fk_character_equipment_save`
+        FOREIGN KEY (`save_id`) REFERENCES `game_save` (`id`)
+            ON UPDATE RESTRICT ON DELETE CASCADE,
     CONSTRAINT `fk_character_equipment_character_save`
         FOREIGN KEY (`character_id`, `save_id`) REFERENCES `game_character` (`id`, `save_id`)
             ON UPDATE RESTRICT ON DELETE CASCADE,
@@ -274,13 +301,21 @@ CREATE TABLE IF NOT EXISTS `character_equipment`
         FOREIGN KEY (`equipment_id`) REFERENCES `equipment_definition` (`id`)
             ON UPDATE RESTRICT ON DELETE RESTRICT,
     CONSTRAINT `chk_character_equipment_acquired_turn`
-        CHECK (`acquired_turn_number` >= 0),
-    CONSTRAINT `chk_character_equipment_quantity`
-        CHECK (`quantity` > 0)
+        CHECK (`acquired_turn_number` >= 0 AND `last_reinforced_turn` >= `acquired_turn_number`),
+    CONSTRAINT `chk_character_equipment_state`
+        CHECK ((`status` = 'SCENE' AND `quantity` > 0 AND `scene_code` IS NOT NULL
+                AND `item_name` IS NOT NULL AND `item_description` IS NOT NULL)
+            OR (`status` = 'OWNED' AND `quantity` > 0 AND `scene_code` IS NULL)
+            OR (`status` = 'CONSUMED' AND `quantity` = 0 AND `scene_code` IS NULL)),
+    CONSTRAINT `chk_character_equipment_retention`
+        CHECK ((`retention_level` = 'L2' AND `expires_at_turn` IS NULL AND `archived` = 0)
+            OR (`status` = 'SCENE' AND `retention_level` IN ('L0', 'L1')
+                AND `expires_at_turn` IS NOT NULL AND `expires_at_turn` > `last_reinforced_turn`
+                AND `archived` IN (0, 1)))
 ) ENGINE = InnoDB
   DEFAULT CHARACTER SET = utf8mb4
   COLLATE = utf8mb4_unicode_ci
-  COMMENT = '人物背包取得记录';
+  COMMENT = '存档内场景物件、人物背包与消费记录';
 
 CREATE TABLE IF NOT EXISTS `character_book_progress`
 (
@@ -317,6 +352,7 @@ CREATE TABLE IF NOT EXISTS `event_record`
     `request_id`               VARCHAR(128) NULL COMMENT '稳定业务请求编号，普通节点为空',
     `request_payload_json`     JSON         NULL COMMENT '首次请求参数',
     `id`                        CHAR(32)   NOT NULL COMMENT '事件记录ID',
+    `event_sequence`            BIGINT     NOT NULL AUTO_INCREMENT COMMENT '数据库分配的稳定事件先后，同存档写入先锁存档',
     `save_id`                   CHAR(32)   NOT NULL COMMENT '所属存档ID',
     `event_code`                VARCHAR(64) NOT NULL COMMENT '事件编码',
     `event_summary`             TEXT       NOT NULL COMMENT '人生节点或世界事件摘要',
@@ -326,6 +362,8 @@ CREATE TABLE IF NOT EXISTS `event_record`
     `life_milestone`            TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否为人生节点',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_event_record_id_save` (`id`, `save_id`),
+    UNIQUE KEY `uk_event_record_sequence` (`event_sequence`),
+    KEY `idx_event_record_save_sequence` (`save_id`, `event_sequence`),
     UNIQUE KEY `uk_event_record_save_request` (`save_id`, `request_id`),
     KEY `idx_event_record_save_turn` (`save_id`, `occurred_turn_number`),
     KEY `idx_event_record_save_code` (`save_id`, `event_code`),
@@ -347,14 +385,25 @@ CREATE TABLE IF NOT EXISTS `memory_record`
     `save_id`                   CHAR(32) NOT NULL COMMENT '所属存档ID',
     `owner_character_id`        CHAR(32) NOT NULL COMMENT '记忆拥有者人物ID',
     `source_event_id`           CHAR(32) NOT NULL COMMENT '来源事件ID',
+    `source_event_sequence`     BIGINT   NOT NULL COMMENT '来源事件稳定顺序，补齐只读取更早事件',
     `scene_code`                VARCHAR(64) NULL COMMENT '记忆对应场景编码，仅供检索',
     `related_equipment_code_json` JSON    NOT NULL COMMENT '已确认涉及的物品编码数组',
     `related_character_id_json` JSON     NOT NULL COMMENT '相关人物ID组成的JSON数组',
     `occurred_turn_number`      BIGINT   NOT NULL COMMENT '对应事件发生时的总回合编号',
+    `memory_level`              VARCHAR(2) NOT NULL DEFAULT 'L2' COMMENT 'L0当场、L1近期、L2长期',
+    `memory_kind`               VARCHAR(16) NOT NULL DEFAULT 'EXPERIENCE' COMMENT 'EXPERIENCE经历、RELATIONSHIP关系、COMMITMENT约定',
+    `retention_reason`          VARCHAR(300) NOT NULL DEFAULT '历史记忆沿用长期保留' COMMENT '经规则确认后的保留原因',
+    `expires_at_turn`           BIGINT NULL COMMENT 'L1到期回合，达到即退出召回；其他级别为空',
+    `last_reinforced_turn`      BIGINT NOT NULL DEFAULT 0 COMMENT '最后一次实际经历强化的回合，读取不续期',
+    `last_reinforced_sequence`  BIGINT NOT NULL COMMENT '最后一次实际强化的事件顺序，读取不改变',
+    `archived`                  TINYINT(1) NOT NULL DEFAULT 0 COMMENT '主动不保留或已到期；禁止补齐重新生成',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_memory_record_owner_event` (`owner_character_id`, `source_event_id`),
     KEY `idx_memory_record_save_turn` (`save_id`, `occurred_turn_number`),
     KEY `idx_memory_record_owner_save` (`owner_character_id`, `save_id`),
+    KEY `idx_memory_record_owner_active`
+        (`owner_character_id`, `save_id`, `archived`, `last_reinforced_sequence`, `source_event_sequence`),
+    KEY `idx_memory_record_save_sequence` (`save_id`, `source_event_sequence`),
     KEY `idx_memory_record_event_save` (`source_event_id`, `save_id`),
     CONSTRAINT `fk_memory_record_owner_save`
         FOREIGN KEY (`owner_character_id`, `save_id`) REFERENCES `game_character` (`id`, `save_id`)
@@ -363,11 +412,22 @@ CREATE TABLE IF NOT EXISTS `memory_record`
         FOREIGN KEY (`source_event_id`, `save_id`) REFERENCES `event_record` (`id`, `save_id`)
             ON UPDATE RESTRICT ON DELETE CASCADE,
     CONSTRAINT `chk_memory_record_turn`
-        CHECK (`occurred_turn_number` >= 0)
+        CHECK (`occurred_turn_number` >= 0 AND `last_reinforced_turn` >= 0),
+    CONSTRAINT `chk_memory_record_sequence`
+        CHECK (`source_event_sequence` > 0 AND `last_reinforced_sequence` >= `source_event_sequence`),
+    CONSTRAINT `chk_memory_record_kind`
+        CHECK (`memory_kind` IN ('EXPERIENCE', 'RELATIONSHIP', 'COMMITMENT')),
+    CONSTRAINT `chk_memory_record_retention`
+        CHECK ((`memory_level` = 'L0' AND `expires_at_turn` IS NULL AND `archived` = 1)
+            OR (`memory_level` = 'L1' AND `expires_at_turn` IS NOT NULL
+                AND `expires_at_turn` > `occurred_turn_number` AND `archived` IN (0, 1))
+            OR (`memory_level` = 'L2' AND `expires_at_turn` IS NULL AND `archived` = 0)),
+    CONSTRAINT `chk_memory_record_continuity`
+        CHECK (`memory_kind` = 'EXPERIENCE' OR `memory_level` = 'L2')
 ) ENGINE = InnoDB
   DEFAULT CHARACTER SET = utf8mb4
   COLLATE = utf8mb4_unicode_ci
-  COMMENT = '人物长期记忆索引，正文存于本地memory目录JSON';
+  COMMENT = '人物分级记忆索引与保留状态，正文存于本地memory目录JSON';
 
 CREATE TABLE IF NOT EXISTS `exam_record`
 (

@@ -7,7 +7,7 @@
       "rarityCode": "COMMON",
       "price": 0,
       "description": "适合蒙学启蒙的常见读物。",
-      "supplierNpcCode": "NPC_XIANSHENG"
+      "supplierNpcCode": "NPC_DOUBAO"
     },
     {
       "equipmentCode": "BOOK_QIANZIWEN",
@@ -16,7 +16,7 @@
       "rarityCode": "COMMON",
       "price": 0,
       "description": "用于识字和积累基础文辞的蒙学读物。",
-      "supplierNpcCode": "NPC_XIANSHENG"
+      "supplierNpcCode": "NPC_DOUBAO"
     },
     {
       "equipmentCode": "BOOK_LUNYU",
@@ -25,7 +25,7 @@
       "rarityCode": "COMMON",
       "price": 0,
       "description": "书生研习经义与修身思想的基础典籍。",
-      "supplierNpcCode": "NPC_XIANSHENG"
+      "supplierNpcCode": "NPC_DOUBAO"
     },
     {
       "equipmentCode": "BOOK_MENGZI",
@@ -34,7 +34,7 @@
       "rarityCode": "UNCOMMON",
       "price": 0,
       "description": "侧重义理辨析和论说能力的进阶典籍。",
-      "supplierNpcCode": "NPC_XIANSHENG"
+      "supplierNpcCode": "NPC_DOUBAO"
     },
     {
       "equipmentCode": "BOOK_DAXUE",
@@ -43,7 +43,7 @@
       "rarityCode": "UNCOMMON",
       "price": 0,
       "description": "讨论修身、齐家与治事次序的典籍。",
-      "supplierNpcCode": "NPC_XIANSHENG"
+      "supplierNpcCode": "NPC_DOUBAO"
     },
     {
       "equipmentCode": "BOOK_SHIJING",
@@ -52,7 +52,7 @@
       "rarityCode": "UNCOMMON",
       "price": 0,
       "description": "培养文学感受和文辞表达的诗歌典籍。",
-      "supplierNpcCode": "NPC_XIANSHENG"
+      "supplierNpcCode": "NPC_DOUBAO"
     },
     {
       "equipmentCode": "BOOK_MINGJIAWENCHAO",
@@ -61,7 +61,7 @@
       "rarityCode": "RARE",
       "price": 0,
       "description": "收录名家文章、用于揣摩章法的稀有选本。",
-      "supplierNpcCode": "NPC_XIANSHENG"
+      "supplierNpcCode": "NPC_DOUBAO"
     },
     {
       "equipmentCode": "BOOK_JINGSHI_CELUN",
@@ -89,6 +89,16 @@
       "price": 1000,
       "supplierNpcCode": "NPC_SHANGREN",
       "description": "来自未来的《WEIGHTS：GPT-1完整参数》，约1.17亿个浮点数印成八十卷天书，首卷附纸笔手算推理指南。没有八股范文，只有密密麻麻的参数。书商说背完便能出口成章；你怀疑算完一句话，朝代都换了。游戏将整套书抽象为一件物品。"
+    },
+    {
+      "equipmentCode": "ITEM_QINGCHA",
+      "equipmentName": "清茶",
+      "equipmentType": "CONSUMABLE",
+      "rarityCode": "COMMON",
+      "price": 20,
+      "description": "书铺备下的一份清茶，饮用后恢复10点疲劳；没有疲劳时无需饮用。",
+      "supplierNpcCode": "NPC_SHANGREN",
+      "useEffectCode": "RELIEVE_FATIGUE"
     }
   ]
 }

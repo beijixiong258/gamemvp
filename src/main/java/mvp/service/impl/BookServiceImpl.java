@@ -26,8 +26,10 @@ import mvp.service.EquipmentRecordService;
 import mvp.service.EquipmentService;
 import mvp.utils.ClasspathJsonLoader;
 import mvp.utils.Calculator;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
@@ -36,7 +38,6 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -62,32 +63,13 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
     private final BookRecordService bookRecordService;
 
     @Override
+    @Transactional
     public void importDefinitions() {
-        JSONArray equipmentDefinitions = jsonLoader.load("game/equipment.json", JSONObject.class)
-                .getJSONArray("equipment");
         JSONArray bookDefinitions = jsonLoader.load("game/book.json", JSONObject.class).getJSONArray("book");
-        if (equipmentDefinitions == null || bookDefinitions == null || bookDefinitions.isEmpty()) {
-            throw new IllegalStateException("私塾书籍配置缺少 equipment 或 book 数组");
+        if (bookDefinitions == null || bookDefinitions.isEmpty()) {
+            throw new IllegalStateException("私塾书籍配置缺少book数组");
         }
-        Map<String, Equipment> equipmentByCode = new LinkedHashMap<>();
-        for (int index = 0; index < equipmentDefinitions.size(); index++) {
-            Equipment definition = equipmentDefinitions.getJSONObject(index).toBean(Equipment.class);
-            String code = definition.getEquipmentCode();
-            if (code == null || code.isBlank() || equipmentByCode.containsKey(code)) {
-                throw new IllegalStateException("装备配置编码缺失或重复：" + code);
-            }
-            try {
-                Equipment.Rarity.valueOf(definition.getRarityCode());
-            } catch (IllegalArgumentException | NullPointerException exception) {
-                throw new IllegalStateException("装备品质编码无效：" + code, exception);
-            }
-            Equipment equipment = equipmentService.lambdaQuery().eq(Equipment::getEquipmentCode, code).one();
-            if (equipment == null) {
-                equipment = definition;
-                equipmentService.save(equipment);
-            }
-            equipmentByCode.put(code, equipment);
-        }
+        Map<String, Equipment> equipmentByCode = equipmentService.importDefinitions();
         Set<String> importedCodes = new HashSet<>();
         for (int index = 0; index < bookDefinitions.size(); index++) {
             JSONObject definition = bookDefinitions.getJSONObject(index);
@@ -99,12 +81,21 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
             Book configuredBook = definition.toBean(Book.class).setEquipmentId(equipment.getId());
             JSONArray requirements = definition.getJSONArray("readingRequirement");
             if (requirements == null) {
-                throw new IllegalStateException("书籍缺少 readingRequirement 数组：" + code);
+                throw new IllegalStateException("书籍缺少readingRequirement数组：" + code);
             }
             configuredBook.setReadingRequirementJson(requirements.toString());
             bookRule(configuredBook);
             if (getById(equipment.getId()) == null) {
-                save(configuredBook);
+                try {
+                    baseMapper.insert(configuredBook);
+                } catch (DuplicateKeyException exception) {
+                    // 公共定义共用固定主键，其他存档先导入时同步同一行即可。
+                    if (baseMapper.updateById(configuredBook) != 1) {
+                        throw exception;
+                    }
+                }
+            } else {
+                baseMapper.updateById(configuredBook);
             }
         }
     }
@@ -258,6 +249,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
                 .eq(EquipmentRecord::getSaveId, saveId)
                 .eq(EquipmentRecord::getCharacterId, characterId)
                 .eq(EquipmentRecord::getStatus, OWNED)
+                .isNotNull(EquipmentRecord::getEquipmentId)
                 .le(EquipmentRecord::getAcquiredTurnNumber, turnNumber)
                 .list().stream().collect(Collectors.toMap(EquipmentRecord::getEquipmentId,
                         EquipmentRecord::getQuantity, Integer::sum));
@@ -304,9 +296,9 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
             }
             switch (type) {
                 case "MIN_AGE" -> addMinimumReason(reasons, "年龄", context.age(), minimum);
-                case "MIN_GENERAL_ATTRIBUTE" -> addMinimumReason(reasons, "通用属性 " + target,
+                case "MIN_GENERAL_ATTRIBUTE" -> addMinimumReason(reasons, readingRequirementLabel(target),
                         attributeValue(character, target), minimum);
-                case "MIN_CAREER_ABILITY" -> addMinimumReason(reasons, "书生领域能力 " + target,
+                case "MIN_CAREER_ABILITY" -> addMinimumReason(reasons, readingRequirementLabel(target),
                         scholarAbility(scholar, target), minimum);
                 case "BOOK_PROGRESS" -> {
                     Equipment prerequisite = context.equipmentById().values().stream()
@@ -349,6 +341,27 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
             throw new IllegalStateException("书籍阅读数值或能力权重配置错误：" + book.getEquipmentId());
         }
         return rule;
+    }
+
+    private String readingRequirementLabel(String target) {
+        if (target == null) {
+            throw new IllegalStateException("阅读条件缺少 target");
+        }
+        return switch (target) {
+            case "characterZhili" -> "智力";
+            case "characterDaode" -> "道德";
+            case "characterZhengzhi" -> "政治";
+            case "characterJiaoji" -> "交际";
+            case "characterTineng" -> "体能";
+            case "characterJiankang" -> "健康";
+            case "characterPilao" -> "疲劳";
+            case "abilityShizi" -> "识字";
+            case "abilityJingyi" -> "经义";
+            case "abilityWenzhang" -> "文章";
+            case "abilityCelun" -> "策论";
+            case "abilityWenxue" -> "文学";
+            default -> throw new IllegalStateException("未知的阅读条件属性：" + target);
+        };
     }
 
     private void addMinimumReason(List<String> reasons, String label, int current, int minimum) {

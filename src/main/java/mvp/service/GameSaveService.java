@@ -13,8 +13,12 @@ import mvp.entity.FamilyBackground;
 import mvp.entity.GameSave;
 import mvp.entity.Region;
 import mvp.service.BookService.LibraryBook;
+import mvp.service.CharacterService.NpcIntent;
 import mvp.service.EquipmentRecordService.AcquisitionIntent;
 import mvp.service.EquipmentRecordService.InventoryItem;
+import mvp.service.EquipmentRecordService.SceneItem;
+import mvp.service.EquipmentRecordService.SceneItemChange;
+import mvp.service.EquipmentRecordService.SupplyOffer;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -138,13 +142,16 @@ public interface GameSaveService extends IService<GameSave> {
      * @param requestId 结算请求编号
      * @param settlement 引擎计算结果，非结束对话时为空
      * @param acquisitions 本次明确执行的获取行为
+     * @param npcChanges 本次实际观察或互动的人物身份与保留决策
+     * @param sceneItemChanges 本次确认的场景物品及保留决策
      * @param endTurn 是否推进普通回合
      * @param summary 行为摘要
      * @param milestone 是否记录人生节点
      * @return 已执行结果；重复请求返回原结果
      */
     JSONObject settleAiAction(ActionContext before, String requestId, Object payload, DriverResult settlement,
-                             List<AcquisitionIntent> acquisitions, boolean endTurn, String summary, boolean milestone);
+                             List<AcquisitionIntent> acquisitions, List<NpcIntent> npcChanges,
+                             List<SceneItemChange> sceneItemChanges, boolean endTurn, String summary, boolean milestone);
 
     record StartLifeCommand(
             String characterName,
@@ -170,7 +177,9 @@ public interface GameSaveService extends IService<GameSave> {
             List<EventRecord> milestones,
             BigDecimal knowledgeTotal,
             List<InventoryItem> backpack,
-            List<Character> npcs
+            List<Character> npcs,
+            List<SceneItem> sceneItems,
+            List<SupplyOffer> supplies
     ) {
     }
 

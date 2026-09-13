@@ -22,9 +22,10 @@ export const getLocation = (id?: string) => locations.find(l => l.id === id && l
 export const getScene = (location: Location) => scenes.find(s => s.sceneCode === location.sceneCode)
 export const allows = (location: Location, action: string) => getScene(location)?.availableActionCode.includes(action) ?? false
 export const childrenOf = (id: string) => locations.filter(l => l.parentId === id)
-export const npcLocation = (npc: Character) => locations.find(l => getScene(l)?.availableNpcCode.includes(npc.npcCode ?? ''))
+export const npcLocation = (npc: Character) => locations.find(l => npc.currentSceneCode
+  ? l.sceneCode === npc.currentSceneCode : getScene(l)?.availableNpcCode.includes(npc.npcCode ?? ''))
 export const roleName = (code: string | null) => ({
-  NPC_XIANSHENG: '塾师', NPC_GUANSHU: '管书人', NPC_JIAHAO: '同窗',
+  NPC_DOUBAO: '塾师', NPC_GUANSHU: '管书人', NPC_JIAHAO: '同窗',
   NPC_FUQIN: '父亲', NPC_MUQIN: '母亲', NPC_SHANGREN: '书商', NPC_XIANSHI_KAOGUAN: '考官',
 }[code ?? ''] ?? '人物')
 export const examName = (type: string) => ({ EXAM_MENGXUE: '蒙学考', EXAM_JINGYI: '经义考', EXAM_PRE_COUNTY: '县试预考', EXAM_XIANSHI: '县试' }[type] ?? '考试')

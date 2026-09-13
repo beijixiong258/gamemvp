@@ -23,6 +23,7 @@ public class Equipment {
     private Integer price; // 装备价格，单位为文
     private String supplierNpcCode; // 当前提供获取行为的NPC模板编码
     private String description; // 装备基础介绍
+    private String useEffectCode; // NONE或固定消耗效果RELIEVE_FATIGUE
 
     public String getRarityName() {
         return Rarity.valueOf(rarityCode).displayName;

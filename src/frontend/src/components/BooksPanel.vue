@@ -13,7 +13,7 @@ const search = ref('')
 const books = computed(() => (game.detail?.books ?? []).filter(b =>
   b.bookName.includes(search.value.trim()) && (filter.value === 'all' || filter.value === 'owned' && b.ownedQuantity > 0
     || filter.value === 'free' && b.price === 0 || filter.value === 'paid' && b.price > 0)))
-function supplierPlace(book: LibraryBook) { return book.supplierNpcCode === 'NPC_XIANSHENG' ? 'classroom' : 'bookshop' }
+function supplierPlace(book: LibraryBook) { return book.supplierNpcCode === 'NPC_DOUBAO' ? 'classroom' : 'bookshop' }
 async function reading(book: LibraryBook) {
   if (game.question?.bookCode === book.bookCode) { emit('reading'); return }
   await game.askReading(book.bookCode, props.location.sceneCode!)

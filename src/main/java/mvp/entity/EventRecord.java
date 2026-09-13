@@ -1,6 +1,8 @@
 package mvp.entity;
 
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.AllArgsConstructor;
@@ -16,6 +18,8 @@ import lombok.experimental.Accessors;
 public class EventRecord {
     @TableId(type = IdType.ASSIGN_UUID)
     private String id; // 事件记录ID
+    @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
+    private Long eventSequence; // 数据库分配的稳定事件顺序；回合只表示游戏时间
     private String saveId; // 事件所属的游戏存档ID
     private String requestId; // 一次业务请求的稳定编号；普通人生节点可为空
     private String requestPayloadJson; // 原始业务参数，防止同一请求编号被用于其他操作

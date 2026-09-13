@@ -2,7 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { ApiError, request, segment } from '../api/http'
 import type { Dialogue, FamilyBackground, LibraryBook, OperationKind, OperationResult, PendingRequest,
-  ReadingQuestion, Region, SaveDetail, SaveSummary } from '../types/game'
+  ReadingQuestion, Region, SaveDetail, SaveSummary, SupplyOffer } from '../types/game'
 
 export function readLocal<T>(key: string, fallback: T): T {
   try { const value = localStorage.getItem(key); return value ? JSON.parse(value) as T : fallback } catch { return fallback }
@@ -167,7 +167,7 @@ export const useGameStore = defineStore('game', () => {
     }
     if (operation.kind === 'background' && detail.value) detail.value.familyBackground = result as FamilyBackground
     notice.value = data.feedback || data.summary || data.applied?.summary
-      || (operation.kind === 'acquire' ? '已取得《' + data.equipmentName + '》×' + data.quantity + '，花费 ' + data.cost + ' 文。'
+      || (operation.kind === 'acquire' ? '已取得' + data.equipmentName + ' ×' + data.quantity + '，花费 ' + data.cost + ' 文。'
         : operation.kind === 'question' ? '题目已备好，请写下你的体会。'
         : operation.kind === 'background' ? '童年往事已记下。' : operation.kind === 'thought' ? '思路已整理好。' : '')
     try { await syncDetail(epoch) } catch (e) {
@@ -202,6 +202,22 @@ export const useGameStore = defineStore('game', () => {
     return commit('acquire', book.price ? '正在买书' : '正在领取教材', '/equipment/' + path() + '/' + actor() + '/acquire',
       { requestId: freshId(), sceneCode, supplierNpcCode: book.supplierNpcCode, equipmentCode: book.bookCode, quantity: 1 })
   }
+  function acquireSupply(offer: SupplyOffer, sceneCode: string) {
+    if (!detail.value) return
+    return commit('acquire', '正在购买物品', '/equipment/' + path() + '/' + actor() + '/acquire',
+      { requestId: freshId(), sceneCode, supplierNpcCode: offer.equipment.supplierNpcCode,
+        equipmentCode: offer.equipment.equipmentCode, quantity: 1 })
+  }
+  function pickup(itemId: string, sceneCode: string) {
+    if (!detail.value) return
+    return commit('pickup', '正在拾取物品', '/equipment/' + path() + '/' + actor() + '/pickup',
+      { requestId: freshId(), itemId, sceneCode, expectedTurnNumber: detail.value.save.totalTurnNumber })
+  }
+  function useItem(itemId: string, sceneCode: string) {
+    if (!detail.value) return
+    return commit('use', '正在使用物品', '/equipment/' + path() + '/' + actor() + '/use',
+      { requestId: freshId(), itemId, sceneCode, expectedTurnNumber: detail.value.save.totalTurnNumber })
+  }
   function startDialogue(counterpartId: string, sceneCode: string) {
     if (dialogue.value && !dialogue.value.ended) { notice.value = '请先结束当前对话，再与另一位人物交谈。'; return }
     return commit('dialogue-start', '正在开始交谈', '/dialogue/' + path() + '/actor/' + actor() + '/start',
@@ -233,6 +249,6 @@ export const useGameStore = defineStore('game', () => {
 
   return { detail, player, saves, regions, dialogue, question, pending, busy, loading, stale, error, busyLabel,
     notice, outcome, canWrite, readyExam, sick, creationUncertain, confirmCreationChecked,
-    loadSaves, loadRegions, createLife, enter, refresh, retry, action, free, acquire,
+    loadSaves, loadRegions, createLife, enter, refresh, retry, action, free, acquire, acquireSupply, pickup, useItem,
     startDialogue, sendDialogue, askReading, answerReading, thought, submitExam, background }
 })

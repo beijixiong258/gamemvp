@@ -8,6 +8,8 @@ const game = useGameStore()
 const text = useDraft(() => 'mvp:dialogue-draft:' + (game.dialogue?.id ?? 'none'))
 const counterpart = computed(() => game.detail?.npcs.find(n => n.id === game.dialogue?.counterpartId))
 const history = computed<DialogueMessage[]>(() => { try { return JSON.parse(game.dialogue?.messagesJson || '[]') } catch { return [] } })
+const counterpartName = computed(() => counterpart.value?.name
+  ?? history.value.find(item => item.speaker === 'counterpart' && item.speakerName)?.speakerName ?? '对方')
 const bottom = ref<HTMLElement>()
 watch(() => game.dialogue?.version, async () => {
   const lastActorMessage = [...history.value].reverse().find(item => item.speaker === 'actor' && !item.manualEnd)
@@ -21,13 +23,13 @@ async function send() {
 </script>
 <template>
   <template v-if="game.dialogue">
-    <div class="dialogue-person"><img :src="portrait(counterpart?.npcCode)" :alt="counterpart?.name ?? '对话人物'" /><div><h3>{{ counterpart?.name ?? '对方' }}</h3><p>{{ game.dialogue.ended ? '这场交谈已经结束' : '正在交谈' }} · {{ game.dialogue.version }} / 5 轮</p></div></div>
+    <div class="dialogue-person"><img :src="portrait(counterpart?.npcCode)" :alt="counterpartName" /><div><h3>{{ counterpartName }}</h3><p>{{ game.dialogue.ended ? '这场交谈已经结束' : '正在交谈' }} · {{ game.dialogue.version }} / 5 轮</p></div></div>
     <div class="dialogue-history" role="log" aria-live="polite" aria-relevant="additions text">
       <p v-if="!history.length" class="empty-state">有什么想说的，就从第一句话开始吧。</p>
       <div v-for="(item, index) in history" :key="index" :class="['message', item.speaker]">
-        <strong>{{ item.speaker === 'actor' ? game.player?.name : counterpart?.name }}</strong>
+        <strong>{{ item.speakerName || (item.speaker === 'actor' ? game.player?.name : counterpartName) }}</strong>
         <p>{{ item.manualEnd ? '你准备结束这场交谈。' : item.text }}</p>
-        <ul v-if="item.executedTrades?.length" class="trade-list"><li v-for="(trade, i) in item.executedTrades" :key="i">取得《{{ trade.equipmentName }}》×{{ trade.quantity }}，花费 {{ trade.cost }} 文</li></ul>
+        <ul v-if="item.executedTrades?.length" class="trade-list"><li v-for="(trade, i) in item.executedTrades" :key="i">取得{{ trade.equipmentName }} ×{{ trade.quantity }}，花费 {{ trade.cost }} 文</li></ul>
       </div><div ref="bottom"></div>
     </div>
     <form v-if="!game.dialogue.ended" class="writing-form" @submit.prevent="send">

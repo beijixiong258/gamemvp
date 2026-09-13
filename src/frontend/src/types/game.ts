@@ -9,6 +9,7 @@ export interface Character {
   wallet: number; sickTurnsRemaining: number; birthRegionId: string; currentRegionId: string; birthday: string
   officialPosition: string | null; officialRank: string | null; degree: string | null; titlesJson: string | null
   personalitySummary: string | null; currentState: string | null
+  retentionLevel: MemoryLevel; expiresAtTurn: number | null; currentSceneCode: string | null; archived: boolean
   characterZhili: number; characterDaode: number; characterZhengzhi: number; characterJiaoji: number
   characterTineng: number; characterJiankang: number; characterPilao: number
 }
@@ -33,15 +34,26 @@ export interface Exam {
 export interface Milestone {
   id: string; eventCode: string; eventSummary: string; occurredTurnNumber: number; lifeMilestone: boolean
 }
+export type MemoryLevel = 'L0' | 'L1' | 'L2'
+export interface Equipment {
+  id: string; equipmentCode: string; equipmentName: string; equipmentType: string
+  rarityCode: string; rarityName: string; rarityColor: string; description: string; price: number
+  supplierNpcCode: string | null; useEffectCode: string | null
+}
 export interface InventoryItem {
-  equipment: { id: string; equipmentCode: string; equipmentName: string; equipmentType: string
-    rarityCode: string; rarityName: string; rarityColor: string; description: string; price: number }
-  quantity: number
+  equipment: Equipment; quantity: number; itemId: string; useEffectCode: string; usable: boolean
+}
+export interface SceneItem {
+  id: string; itemCode: string; itemName: string; description: string; sceneCode: string
+  retentionLevel: MemoryLevel; expiresAtTurn: number | null; quantity: number
+}
+export interface SupplyOffer {
+  equipment: Equipment; sceneCode: string; ownedQuantity: number; canAcquire: boolean; blockedReasons: string[]
 }
 export interface SaveDetail {
   save: GameSave; character: Character; familyBackground: FamilyBackground; scholarProfile: Scholar
   books: LibraryBook[]; exams: Exam[]; milestones: Milestone[]; knowledgeTotal: number
-  backpack: InventoryItem[]; npcs: Character[]
+  backpack: InventoryItem[]; npcs: Character[]; sceneItems: SceneItem[]; supplies: SupplyOffer[]
 }
 export interface SaveSummary {
   saveId: string; characterName: string; age: number; currentYear: number; status: SaveStatus; createdAt: string
@@ -51,7 +63,7 @@ export interface Dialogue {
   id: string; saveId: string; actorId: string; counterpartId: string; sceneCode: string
   startedTurnNumber: number; version: number; ended: boolean; messagesJson: string
 }
-export interface DialogueMessage { speaker: 'actor' | 'counterpart'; text: string; manualEnd?: boolean
+export interface DialogueMessage { speaker: 'actor' | 'counterpart'; text: string; speakerName?: string; manualEnd?: boolean
   executedTrades?: { equipmentName: string; quantity: number; cost: number }[] }
 export interface ReadingQuestion {
   questionId: string; actorId: string; bookCode: string; bookName: string; sceneCode: string
@@ -66,7 +78,7 @@ export interface OperationResult {
   exam?: Exam; score?: number; evaluation?: string; equipmentName?: string; quantity?: number; cost?: number
 }
 export type OperationKind = 'action' | 'free' | 'acquire' | 'dialogue-start' | 'dialogue-message'
-  | 'question' | 'answer' | 'thought' | 'exam' | 'background'
+  | 'question' | 'answer' | 'thought' | 'exam' | 'background' | 'pickup' | 'use'
 export interface PendingRequest {
   kind: OperationKind; saveId: string; path: string; label: string; body?: Record<string, unknown>
 }

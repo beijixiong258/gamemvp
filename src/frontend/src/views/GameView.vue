@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useGameStore, readLocal, writeLocal } from '../stores/game'
 import { useDraft } from '../stores/draft'
 import { assets, portrait } from '../config/assets'
-import { allows, childrenOf, getLocation, getScene, locations, npcLocation, roleName } from '../config/locations'
+import { allows, childrenOf, getLocation, locations, npcLocation, roleName } from '../config/locations'
 import type { Character } from '../types/game'
 import ModalPanel from '../components/ModalPanel.vue'
 import CharacterStats from '../components/CharacterStats.vue'
@@ -14,9 +14,9 @@ import DialoguePanel from '../components/DialoguePanel.vue'
 const game = useGameStore()
 const route = useRoute()
 const router = useRouter()
-type Panel = 'stats' | 'books' | 'npcs' | 'places' | 'free' | 'backpack' | 'chronicle' | 'dialogue' | 'reading'
+type Panel = 'stats' | 'books' | 'npcs' | 'places' | 'free' | 'backpack' | 'chronicle' | 'dialogue' | 'reading' | 'items' | 'supplies'
 const panel = ref<Panel | null>(null)
-const panelTitles: Record<Panel, string> = { stats: '人物小传', books: '书目与阅读', npcs: '此间人物', places: '县中去处', free: '你想做些什么', backpack: '随身行囊', chronicle: '人生记事', dialogue: '一席话', reading: '以身入局 · 读书体会' }
+const panelTitles: Record<Panel, string> = { stats: '人物小传', books: '书目与阅读', npcs: '此间人物', places: '县中去处', free: '你想做些什么', backpack: '随身行囊', chronicle: '人生记事', dialogue: '一席话', reading: '以身入局 · 读书体会', items: '身边小物', supplies: '书铺杂物' }
 const location = computed(() => getLocation(typeof route.query.place === 'string' ? route.query.place : readLocal('mvp:' + route.params.saveId + ':place', 'home')))
 const children = computed(() => childrenOf(location.value.id))
 const parent = computed(() => locations.find(l => l.id === location.value.parentId))
@@ -24,12 +24,15 @@ const county = computed(() => game.regions.find(r => r.id === game.player?.curre
 const placeName = computed(() => location.value.id === 'county' ? county.value + '城' : location.value.label)
 const availableNpcs = computed(() => {
   const npcs = game.detail?.npcs.filter(n => n.enabled) ?? []
-  if (location.value.sceneCode) return npcs.filter(n => getScene(location.value)?.availableNpcCode.includes(n.npcCode ?? ''))
+  if (location.value.sceneCode) return npcs.filter(n => npcLocation(n)?.id === location.value.id)
   return npcs.filter(n => {
     const home = npcLocation(n)
     return home && (location.value.id === 'county' || home.parentId === location.value.id)
   })
 })
+const sceneItems = computed(() => (game.detail?.sceneItems ?? []).filter(item => item.sceneCode === location.value.sceneCode))
+const supplies = computed(() => (game.detail?.supplies ?? []).filter(offer =>
+  offer.equipment.equipmentType === 'CONSUMABLE' && offer.sceneCode === location.value.sceneCode))
 const milestones = computed(() => [...(game.detail?.milestones ?? [])].reverse())
 const freeRoom = ref('')
 const freeText = useDraft(() => 'mvp:free-draft:' + route.params.saveId + ':' + location.value.id)
@@ -93,6 +96,8 @@ async function submitFree() {
         <button v-if="allows(location, 'READ_BOOK') || location.id === 'bookshop'" class="button-ivory" @click="panel = 'books'">{{ location.id === 'bookshop' ? '看看书铺' : '打开书目' }}</button>
         <button v-if="allows(location, 'PRACTICE_WRITING')" class="button-ivory" :disabled="!canAct" @click="game.action('PRACTICE_WRITING', location.sceneCode!)">练习文章 · 一回合</button>
         <button v-if="allows(location, 'REST')" class="button-ivory" :disabled="!canAct" @click="game.action('REST', location.sceneCode!)">休息 · 一回合</button>
+        <button v-if="location.sceneCode" class="button-ivory" @click="panel = 'items'">身边小物<span v-if="sceneItems.length"> · {{ sceneItems.length }}</span></button>
+        <button v-if="location.id === 'bookshop'" class="button-ivory" @click="panel = 'supplies'">看看杂物</button>
         <button v-if="game.question" class="button-ivory" @click="panel = 'reading'">继续写体会</button>
       </div>
       <div v-if="game.sick" class="scene-notice warning"><strong>身体需要休养</strong><p>休养会继续至康复或下一个考试节点。</p><button class="primary" :disabled="!game.canWrite" @click="game.action('REST', 'SCENE_JIA_WOSHI')">继续休养</button></div>
@@ -115,9 +120,9 @@ async function submitFree() {
       <DialoguePanel v-else-if="panel === 'dialogue'" />
       <template v-else-if="panel === 'npcs'">
         <p class="muted">{{ location.sceneCode ? '当前房间中的人物。' : '选择人物，会先进入对方所在的房间。' }}</p>
-        <div v-if="!availableNpcs.length" class="empty-state"><p>这里没有常驻人物。</p></div>
+        <div v-if="!availableNpcs.length" class="empty-state"><p>此刻没有可交谈的人物。</p></div>
         <button v-for="npc in availableNpcs" :key="npc.id" class="npc-card" :disabled="!canAct" @click="talk(npc)">
-          <img :src="portrait(npc.npcCode)" :alt="npc.name" /><span><strong>{{ npc.name }}</strong><small>{{ roleName(npc.npcCode) }} · {{ npcLocation(npc)?.label }}</small></span><span aria-hidden="true">交谈 →</span>
+          <img :src="portrait(npc.npcCode)" :alt="npc.name" /><span><strong>{{ npc.name }}</strong><small>{{ roleName(npc.npcCode) }} · {{ npcLocation(npc)?.label }}</small><small v-if="!npc.npcCode && npc.currentState">{{ npc.currentState }}</small></span><span aria-hidden="true">交谈 →</span>
         </button>
       </template>
       <div v-else-if="panel === 'places'" class="places-grid"><button v-for="place in locations" :key="place.id" :class="{ selected: location.id === place.id }" :disabled="!place.enabled || game.busy" @click="go(place.id)"><strong>{{ place.id === 'county' ? county + '城' : place.label }}</strong><small>{{ place.enabled ? locations.find(l => l.id === place.parentId)?.label || '地方总览' : '尚未开放' }}</small></button></div>
@@ -128,7 +133,31 @@ async function submitFree() {
       </form>
       <template v-else-if="panel === 'backpack'">
         <div v-if="!game.detail.backpack.length" class="empty-state"><span class="empty-glyph">囊</span><p>行囊尚空。先到讲堂领取教材吧。</p><button @click="go('classroom')">前往讲堂 →</button></div>
-        <div v-for="item in game.detail.backpack" :key="item.equipment.id" class="inventory-row"><img :src="assets.book" alt="" loading="lazy" /><div><h3>{{ item.equipment.equipmentName }} <small>×{{ item.quantity }}</small></h3><p>{{ item.equipment.description }}</p><span class="tag">{{ item.equipment.rarityName }}</span></div></div>
+        <p v-if="game.detail.backpack.some(item => item.useEffectCode !== 'NONE') && !location.sceneCode" class="inline-note">进入一个房间或书铺后，可以使用行囊中的物品。</p>
+        <div v-for="item in game.detail.backpack" :key="item.itemId" class="inventory-row">
+          <img v-if="item.equipment.equipmentType === 'BOOK'" :src="assets.book" alt="" loading="lazy" />
+          <span v-else class="item-glyph" aria-hidden="true">{{ item.useEffectCode === 'RELIEVE_FATIGUE' ? '茶' : '物' }}</span>
+          <div><h3>{{ item.equipment.equipmentName }} <small>×{{ item.quantity }}</small></h3><p>{{ item.equipment.description }}</p>
+            <span class="tag">{{ item.equipment.rarityName }}</span>
+            <div v-if="item.useEffectCode !== 'NONE'" class="button-row"><button :disabled="!canAct || !item.usable || !location.sceneCode" @click="game.useItem(item.itemId, location.sceneCode!)">使用一份</button><small v-if="item.useEffectCode === 'RELIEVE_FATIGUE' && game.player.characterPilao === 0" class="muted">此刻精神充足</small></div>
+          </div>
+        </div>
+      </template>
+      <template v-else-if="panel === 'items'">
+        <p class="muted">这里实际留下的小物，拾取后可在行囊中查看。拾取不消耗回合。</p>
+        <div v-if="!sceneItems.length" class="empty-state"><p>暂时没有可拾取的小物。日常行动中可能发现一些。</p></div>
+        <div v-for="item in sceneItems" :key="item.id" class="inventory-row"><span class="item-glyph" aria-hidden="true">物</span><div>
+          <h3>{{ item.itemName }}</h3><p>{{ item.description }}</p><button :disabled="!canAct || !location.sceneCode" @click="game.pickup(item.id, location.sceneCode!)">拾取 →</button>
+        </div></div>
+      </template>
+      <template v-else-if="panel === 'supplies'">
+        <p class="muted">陆掌柜备下的日常用品，按标价购买。购买和使用均不消耗回合。</p>
+        <div v-if="!supplies.length" class="empty-state"><p>暂无在售杂物。</p></div>
+        <div v-for="offer in supplies" :key="offer.equipment.id" class="inventory-row"><span class="item-glyph" aria-hidden="true">茶</span><div>
+          <h3>{{ offer.equipment.equipmentName }}</h3><p>{{ offer.equipment.description }}</p>
+          <p v-if="offer.blockedReasons.length" class="blocked-reason">{{ offer.blockedReasons.join('；') }}</p>
+          <button class="primary" :disabled="!canAct || !offer.canAcquire" @click="game.acquireSupply(offer, location.sceneCode!)">购买 · {{ offer.equipment.price }} 文</button>
+        </div></div>
       </template>
       <template v-else-if="panel === 'chronicle'">
         <span class="eyebrow">六岁以前</span><p class="prose">{{ game.detail.familyBackground.backgroundSummary }}</p>

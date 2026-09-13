@@ -2,7 +2,7 @@ package mvp.engine;
 
 public final class GameRuleConstant {
 
-    public static final int TURNS_PER_MONTH = 4;
+    public static final int TURNS_PER_MONTH = 3;
     public static final int DEFAULT_START_YEAR = 1547;
     public static final int SCHOOL_START_AGE = 6;
     public static final int DEFAULT_BIRTH_YEAR = DEFAULT_START_YEAR - SCHOOL_START_AGE;
@@ -24,6 +24,9 @@ public final class GameRuleConstant {
     public static final int SICK_RECOVERY_HEALTH = 40;
     public static final int MAX_DIALOGUE_ROUNDS = 5;
     public static final int MEMORY_CONTEXT_MAX_CHARACTERS = 5_000;
+    public static final int MEMORY_SHORT_RETENTION_TURNS = 3;
+    public static final int MEMORY_DEFAULT_RETENTION_TURNS = 9;
+    public static final int MEMORY_LONG_RETENTION_TURNS = 18;
     public static final int AI_ATTRIBUTE_CHANGE_LIMIT = 3;
     public static final int AI_ABILITY_CHANGE_LIMIT = 5;
     public static final int MIN_INITIAL_FAMILY_WEALTH = 10_000;

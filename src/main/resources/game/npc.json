@@ -19,7 +19,7 @@
       "enabled": true
     },
     {
-      "npcCode": "NPC_XIANSHENG",
+      "npcCode": "NPC_DOUBAO",
       "displayName": "窦苞",
       "roleCode": "ROLE_XIANSHENG",
       "nameMode": "FIXED",

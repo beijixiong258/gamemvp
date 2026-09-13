@@ -5,6 +5,8 @@ import mvp.engine.CharacterEngine.DriverResult;
 import mvp.engine.CharacterEngine.ScholarState;
 import mvp.engine.CharacterEngine;
 import mvp.service.EquipmentRecordService.AcquisitionIntent;
+import mvp.service.EquipmentRecordService.SceneItemChange;
+import mvp.service.CharacterService.NpcIntent;
 import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
@@ -65,7 +67,9 @@ public class FreeActionWorkflow {
                 finalState.settlement(),
                 resolution.eventSummary(),
                 resolution.lifeMilestone(),
-                resolution.acquisitions() == null ? List.of() : resolution.acquisitions()
+                resolution.acquisitions() == null ? List.of() : resolution.acquisitions(),
+                resolution.npcChanges() == null ? List.of() : resolution.npcChanges(),
+                resolution.sceneItemChanges() == null ? List.of() : resolution.sceneItemChanges()
         );
     }
 
@@ -128,7 +132,9 @@ public class FreeActionWorkflow {
             DriverResult settlement,
             String eventSummary,
             boolean lifeMilestone,
-            List<AcquisitionIntent> acquisitions
+            List<AcquisitionIntent> acquisitions,
+            List<NpcIntent> npcChanges,
+            List<SceneItemChange> sceneItemChanges
     ) {
     }
 }

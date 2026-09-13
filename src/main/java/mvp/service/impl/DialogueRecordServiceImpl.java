@@ -15,12 +15,13 @@ import mvp.entity.GameSave;
 import mvp.mapper.DialogueRecordMapper;
 import mvp.mapper.GameSaveMapper;
 import mvp.service.CharacterService;
+import mvp.service.CharacterService.NpcIntent;
 import mvp.service.DialogueRecordService;
 import mvp.service.EquipmentRecordService.AcquisitionIntent;
+import mvp.service.EquipmentRecordService.SceneItemChange;
 import mvp.service.EventRecordService;
 import mvp.service.GameSaveService;
 import mvp.service.MemoryRecordService;
-import mvp.utils.ClasspathJsonLoader;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -39,7 +40,6 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
     private final CharacterService characterService;
     private final EventRecordService eventRecordService;
     private final MemoryRecordService memoryRecordService;
-    private final ClasspathJsonLoader jsonLoader;
     private final FreeActionResolver resolver;
     private final CharacterEngine characterEngine;
     private final PlatformTransactionManager transactionManager;
@@ -66,14 +66,8 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
                 || !Boolean.TRUE.equals(counterpart.getEnabled()) || Objects.equals(actorId, counterpart.getId())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "对话对象不存在或不可用");
         }
-        if (counterpart.getNpcCode() != null) {
-            boolean present = jsonLoader.load("game/scene.json", JSONObject.class).getJSONArray("scene")
-                    .toList(JSONObject.class).stream().anyMatch(candidate ->
-                            Objects.equals(candidate.getStr("sceneCode"), command.sceneCode())
-                                    && candidate.getJSONArray("availableNpcCode").contains(counterpart.getNpcCode()));
-            if (!present) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "对话对象不在当前场景");
-            }
+        if (!characterService.isPresent(counterpart, command.sceneCode(), context.turnNumber())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "对话对象不在当前场景或已经离开");
         }
         DialogueRecord dialogue = new DialogueRecord().setSaveId(saveId).setActorId(context.actorId())
                 .setCounterpartId(counterpart.getId()).setSceneCode(command.sceneCode())
@@ -81,7 +75,7 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
         save(dialogue);
         JSONObject result = JSONUtil.parseObj(dialogue);
         eventRecordService.recordOperation(saveId, actorId, command.requestId(), payload, "START_DIALOGUE",
-                context.turnNumber(), result);
+                context.turnNumber(), result, List.of(counterpart.getId()));
         return result;
     }
 
@@ -101,16 +95,22 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
         }
         DialogueRecord before = loadDialogue(saveId, dialogueId);
         requireOpenVersion(before, command);
-        GameSaveService.ActionContext snapshot = gameSaveService.prepareAction(saveId, before.getActorId(), before.getSceneCode());
+        GameSaveService.ActionContext observed = gameSaveService.prepareAction(saveId, before.getActorId(), before.getSceneCode());
         Character counterpart = characterService.getById(before.getCounterpartId());
-        if (counterpart == null || !Boolean.TRUE.equals(counterpart.getEnabled())) {
+        if (counterpart == null || !Objects.equals(saveId, counterpart.getSaveId())
+                || !characterService.isPresent(counterpart, before.getSceneCode(), observed.turnNumber())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "对话对象已不可用");
         }
+        // 私人对话只提供已经参与的对方身份，不能借结算让同场第三人获得谈话经历。
+        JSONObject facts = JSONUtil.parseObj(observed.contextSummary()).set("npcs", List.of(counterpart));
+        GameSaveService.ActionContext snapshot = new GameSaveService.ActionContext(observed.saveId(), observed.actorId(),
+                observed.turnNumber(), observed.sceneCode(), observed.character(), observed.scholar(), facts.toString());
         int dialogueRound = before.getVersion() + 1;
         String memories = memoryRecordService.recall(saveId, counterpart.getId(), before.getActorId(),
                 GameRuleConstant.MEMORY_CONTEXT_MAX_CHARACTERS);
-        String input = new JSONObject().set("facts", JSONUtil.parseObj(snapshot.contextSummary())).set("counterpart", counterpart)
-                .set("history", JSONUtil.parseArray(before.getMessagesJson())).set("currentText", command.text())
+        String submittedText = command.endDialogue() ? "" : command.text();
+        String input = new JSONObject().set("facts", facts).set("counterpart", counterpart)
+                .set("history", JSONUtil.parseArray(before.getMessagesJson())).set("currentText", submittedText)
                 .set("manualEnd", command.endDialogue()).set("dialogueRound", dialogueRound)
                 .set("maxDialogueRounds", GameRuleConstant.MAX_DIALOGUE_ROUNDS).set("memoryContext", JSONUtil.parseArray(memories)).toString();
         FreeActionResolver.DialogueResolution resolution = resolver.resolveDialogue(input);
@@ -124,9 +124,20 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
         }
         CharacterEngine.DriverResult settlement = end
                 ? characterEngine.applyDriver(snapshot.character(), snapshot.scholar(), resolution.driverPatch()) : null;
-        // 手动结束只总结历史；不得把历史中的购买意图再次执行。
+        // 手动结束只总结已经发出的历史，不执行历史交易、不创建对象，也不因总结而续期。
         List<AcquisitionIntent> acquisitions = command.endDialogue() || resolution.acquisitions() == null ? List.of()
                 : resolution.acquisitions();
+        List<NpcIntent> npcChanges = command.endDialogue() || resolution.npcChanges() == null ? List.of()
+                : resolution.npcChanges();
+        List<SceneItemChange> sceneItemChanges = command.endDialogue() || resolution.sceneItemChanges() == null ? List.of()
+                : resolution.sceneItemChanges();
+        if (npcChanges.stream().anyMatch(intent -> intent == null || !counterpart.getId().equals(intent.characterId()))) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "私人对话只能更新当前对方，不能创建或通知第三人");
+        }
+        if (acquisitions.stream().anyMatch(intent -> intent == null || counterpart.getNpcCode() == null
+                || !counterpart.getNpcCode().equals(intent.supplierNpcCode()))) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "对话中的物品只能由当前对方按其固定目录提供");
+        }
         return new TransactionTemplate(transactionManager).execute(status -> {
             lockSave(saveId);
             JSONObject replay = eventRecordService.replay(saveId, command.requestId(), payload);
@@ -136,17 +147,23 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
             DialogueRecord current = lambdaQuery().eq(DialogueRecord::getId, dialogueId).last("FOR UPDATE").one();
             requireOpenVersion(current, command);
             JSONObject applied = gameSaveService.settleAiAction(snapshot, command.requestId() + "/settlement",
-                    payload, settlement, acquisitions, false, resolution.reply(), false);
+                    payload, settlement, acquisitions, npcChanges, sceneItemChanges, false, resolution.reply(), false);
             JSONArray history = JSONUtil.parseArray(current.getMessagesJson());
-            history.add(new JSONObject().set("speaker", "actor").set("text", command.text() == null ? "" : command.text())
+            history.add(new JSONObject().set("speaker", "actor")
+                    .set("speakerName", facts.getJSONObject("actor").getStr("name")).set("text", submittedText)
                     .set("manualEnd", command.endDialogue()));
-            history.add(new JSONObject().set("speaker", "counterpart").set("text", resolution.reply())
-                    .set("executedTrades", applied.getJSONArray("trades")));
+            history.add(new JSONObject().set("speaker", "counterpart")
+                    .set("speakerName", counterpart.getName()).set("text", resolution.reply())
+                    .set("executedTrades", applied.getJSONArray("trades"))
+                    .set("resolvedNpcs", applied.getJSONArray("resolvedNpcs"))
+                    .set("sceneItems", applied.getJSONArray("sceneItems")));
             current.setMessagesJson(history.toString()).setVersion(current.getVersion() + 1).setEnded(end);
             updateById(current);
             JSONObject result = new JSONObject().set("dialogue", current).set("reply", resolution.reply()).set("applied", applied);
             eventRecordService.recordOperation(saveId, current.getActorId(), command.requestId(), payload,
-                    end ? "END_DIALOGUE" : "DIALOGUE_MESSAGE", snapshot.turnNumber(), result);
+                    end ? "END_DIALOGUE" : "DIALOGUE_MESSAGE",
+                    applied.getJSONObject("detail").getJSONObject("save").getLong("totalTurnNumber"),
+                    result, List.of(current.getCounterpartId()));
             return result;
         });
     }

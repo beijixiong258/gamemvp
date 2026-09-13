@@ -29,7 +29,7 @@
         "ACQUIRE_EQUIPMENT"
       ],
       "availableNpcCode": [
-        "NPC_XIANSHENG",
+        "NPC_DOUBAO",
         "NPC_JIAHAO"
       ]
     },
@@ -108,7 +108,7 @@
         "ACQUIRE_EQUIPMENT"
       ],
       "availableNpcCode": [
-        "NPC_XIANSHENG",
+        "NPC_DOUBAO",
         "NPC_JIAHAO"
       ]
     },

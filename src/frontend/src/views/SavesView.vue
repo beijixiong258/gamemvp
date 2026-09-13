@@ -2,23 +2,21 @@
 import { onMounted } from 'vue'
 import { useGameStore } from '../stores/game'
 import { assets } from '../config/assets'
-import { statusName } from '../config/locations'
 const game = useGameStore()
 onMounted(() => game.loadSaves())
 const created = (date: string) => new Date(date).toLocaleDateString('zh-CN')
 </script>
 <template>
   <main id="main-content" class="entry-page" :style="{ '--scene-image': 'url(' + assets.home + ')' }">
-    <header class="brand-line"><span class="seal">书</span><span>豪杰成长计划plus</span><small>一卷书 · 一段人生</small></header>
+    <header class="brand-line"><span class="seal">书</span><span>豪杰成长计划plus</span></header>
     <div class="entry-content">
       <section class="entry-intro">
-        <span class="eyebrow light">岭南 · 嘉靖年间</span>
-        <h1>从一声书响，<br />写起你的人生。</h1>
-        <p>六岁入塾，十六岁赴县试。<br />在读书、交谈与日常选择中，走出自己的路。</p>
+        <h1>豪杰的故事由你来书写</h1>
+        <p>当前为最小交付版本（MVP），先开放书生线。你可以从入学开始，体验学习、人物互动和考试，进度会自动保存。</p>
         <RouterLink class="button primary large" to="/new">启程 · 新的人生 <span aria-hidden="true">↗</span></RouterLink>
       </section>
       <section class="save-shelf paper" aria-labelledby="save-title">
-        <header class="section-heading"><div><span class="eyebrow">往事存于此</span><h2 id="save-title">续上未完的一页</h2></div>
+        <header class="section-heading"><div><span class="eyebrow">存档</span><h2 id="save-title">读取存档</h2></div>
           <button class="text-button" :disabled="game.loading" @click="game.loadSaves()">刷新</button>
         </header>
         <p v-if="game.creationUncertain" class="inline-note">上次开局的结果尚未确认，请先核对下面是否已有新存档。</p>
@@ -27,7 +25,7 @@ const created = (date: string) => new Date(date).toLocaleDateString('zh-CN')
         <div v-else class="save-list">
           <RouterLink v-for="save in game.saves" :key="save.saveId" class="save-card" :to="{ name: 'game', params: { saveId: save.saveId } }">
             <div class="save-monogram" aria-hidden="true">{{ Array.from(save.characterName)[0] }}</div>
-            <div class="save-card-body"><div class="save-card-title"><h3>{{ save.characterName }}</h3><span class="tag">{{ statusName(save.status) }}</span></div>
+            <div class="save-card-body"><div class="save-card-title"><h3>{{ save.characterName }}</h3></div>
               <p>{{ save.age }} 岁 <span>·</span> {{ save.currentYear }} 年 <span v-if="save.degree">· {{ save.degree }}</span></p>
               <small>建档于 {{ created(save.createdAt) }}</small>
             </div><span class="save-arrow" aria-hidden="true">→</span>
@@ -35,6 +33,22 @@ const created = (date: string) => new Date(date).toLocaleDateString('zh-CN')
         </div>
       </section>
     </div>
-    <footer class="entry-footer">人间烟火里，且读且行。</footer>
+    <footer class="entry-footer">《豪杰成长计划plus》是一款人生模拟游戏，你可以安排角色的行动、培养能力，并与其他人物互动。</footer>
   </main>
 </template>
+<style scoped>
+.entry-intro {
+  container-type: inline-size;
+  min-width: 0;
+}
+.entry-intro h1 {
+  font-size: clamp(18px, 9cqw, 48px);
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.entry-footer {
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.8;
+}
+</style>

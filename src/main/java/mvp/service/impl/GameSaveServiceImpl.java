@@ -24,8 +24,12 @@ import mvp.service.BookService.LibraryBook;
 import mvp.service.BookService;
 import mvp.service.CareerProfileShushengService;
 import mvp.service.CharacterService;
+import mvp.service.CharacterService.NpcChanges;
+import mvp.service.CharacterService.NpcIntent;
 import mvp.service.EquipmentRecordService.AcquisitionCommand;
 import mvp.service.EquipmentRecordService.AcquisitionIntent;
+import mvp.service.EquipmentRecordService.SceneItem;
+import mvp.service.EquipmentRecordService.SceneItemChange;
 import mvp.service.EquipmentRecordService;
 import mvp.service.EventRecordService;
 import mvp.service.ExamRecordService;
@@ -45,9 +49,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -267,6 +273,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
             markIllness(context);
             prepareTriggeredExam(context, turn);
             advanceIllness(context);
+            characterService.archiveExpired(context.save().getId(), context.save().getTotalTurnNumber());
             CharacterState after = characterState(context.character());
             ActionChanges changes = new ActionChanges(reading.progressGain(), reading.abilityGain(),
                     after.characterPilao() - before.character().characterPilao(),
@@ -301,9 +308,9 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         String characterContext = new JSONObject().set("name", context.character().getName())
                 .set("age", actorAge(context))
                 .set("character", character).set("scholar", scholar)
-                .set("scene", requireScene(sceneCode, context.character(), "READ_BOOK_PLAYER"))
+                .set("scene", requireScene(sceneCode, context.character(), "READ_BOOK_PLAYER", context.save().getTotalTurnNumber()))
                 .set("teacher", characterService.lambdaQuery().eq(Character::getSaveId, context.save().getId())
-                        .eq(Character::getNpcCode, "NPC_XIANSHENG").eq(Character::getEnabled, true).one()).toString();
+                        .eq(Character::getNpcCode, "NPC_DOUBAO").eq(Character::getEnabled, true).one()).toString();
         return new PlayerReadingAttempt(context.character().getId(), expectedTurnNumber, sceneCode,
                 character, scholar, book, characterContext);
     }
@@ -359,6 +366,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         if (context.character().getCharacterJiankang() <= 0 || context.character().getSickTurnsRemaining() > 0) {
             CharacterState before = characterState(context.character());
             advanceIllness(context);
+            characterService.archiveExpired(context.save().getId(), context.save().getTotalTurnNumber());
             CharacterState after = characterState(context.character());
             JSONObject result = JSONUtil.parseObj(new ActionResult(buildDetail(context), new ActionChanges(0,
                     abilityDifference(scholarState(context.scholar()), scholarState(context.scholar())),
@@ -375,7 +383,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         if (!action.getJSONArray("availableSceneCode").contains(command.sceneCode())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前场景不能执行该行动");
         }
-        requireScene(command.sceneCode(), context.character(), command.actionCode());
+        requireScene(command.sceneCode(), context.character(), command.actionCode(), context.save().getTotalTurnNumber());
 
         CharacterState characterBefore = characterState(context.character());
         ScholarState scholarBefore = scholarState(context.scholar());
@@ -460,6 +468,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         markIllness(context);
         prepareTriggeredExam(context, turnResult);
         advanceIllness(context);
+        characterService.archiveExpired(context.save().getId(), context.save().getTotalTurnNumber());
         CharacterState finalCharacter = characterState(context.character());
         changes = new ActionChanges(changes.progressGain(), changes.abilityGain(),
                 finalCharacter.characterPilao() - characterBefore.characterPilao(),
@@ -569,6 +578,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
             recordMilestone(context, exam.getExamType() + "_RESULT", feedback, Map.of("exam", exam));
             if (playerExam) {
                 advanceIllness(context);
+                characterService.archiveExpired(context.save().getId(), context.save().getTotalTurnNumber());
             }
         }
         return new ExamResult(buildDetail(context), exam, settlement.newlySettled(), feedback);
@@ -636,12 +646,13 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
                 eventRecordService.lambdaQuery()
                         .eq(EventRecord::getSaveId, saveId)
                         .eq(EventRecord::getLifeMilestone, true)
-                        .orderByAsc(EventRecord::getOccurredTurnNumber)
-                        .orderByAsc(EventRecord::getId)
+                        .orderByAsc(EventRecord::getEventSequence)
                         .list(),
                 bookService.totalKnowledge(context.character().getId()),
                 equipmentRecordService.backpack(saveId, context.character().getId()),
-                characterService.lambdaQuery().eq(Character::getSaveId, saveId).eq(Character::getType, 0).list()
+                characterService.listVisibleNpcs(saveId, context.save().getTotalTurnNumber()),
+                equipmentRecordService.listVisibleSceneItems(saveId),
+                equipmentRecordService.supplies(saveId, context.character().getId())
         );
     }
 
@@ -655,11 +666,20 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
     private void recordMilestone(
             ActorContext context, String eventCode, String summary, Map<String, ?> settlement
     ) {
+        recordMilestone(context, eventCode, summary, settlement, List.of());
+    }
+
+    /** 相关人物只来自已验证的实际参与者，场景旁观者不会自动知晓私人经历。 */
+    private void recordMilestone(ActorContext context, String eventCode, String summary,
+                                 Map<String, ?> settlement, List<String> participantIds) {
+        Set<String> participants = new LinkedHashSet<>();
+        participants.add(context.character().getId());
+        participants.addAll(participantIds);
         eventRecordService.save(new EventRecord()
                 .setSaveId(context.save().getId())
                 .setEventCode(eventCode)
                 .setEventSummary(summary)
-                .setRelatedCharacterIdJson(JSONUtil.toJsonStr(List.of(context.character().getId())))
+                .setRelatedCharacterIdJson(JSONUtil.toJsonStr(participants))
                 .setOccurredTurnNumber(context.save().getTotalTurnNumber())
                 .setSettlementResultJson(JSONUtil.toJsonStr(settlement))
                 .setLifeMilestone(true));
@@ -768,8 +788,8 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
                 || context.character().getSickTurnsRemaining() > 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "请先完成考试或重病休养");
         }
-        JSONObject scene = requireScene(sceneCode, context.character(), "FREE_ACTION");
-        List<String> presentNpcCodes = scene.getJSONArray("availableNpcCode").toList(String.class);
+        JSONObject scene = requireScene(sceneCode, context.character(), "FREE_ACTION", context.save().getTotalTurnNumber());
+
         CharacterState character = characterState(context.character());
         ScholarState scholar = scholarState(context.scholar());
         int actorAge = actorAge(context);
@@ -783,9 +803,12 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
                 .set("scene", scene)
                 .set("books", bookService.listLibrary(context.save(), context.character().getId(),
                         character, scholar))
-                .set("npcs", presentNpcCodes.isEmpty() ? List.of() : characterService.lambdaQuery()
-                        .eq(Character::getSaveId, saveId).eq(Character::getType, 0)
-                        .eq(Character::getEnabled, true).in(Character::getNpcCode, presentNpcCodes).list()).toString();
+                .set("backpack", equipmentRecordService.backpack(saveId, context.character().getId()))
+                .set("supplies", equipmentRecordService.supplies(saveId, context.character().getId()).stream()
+                        .filter(offer -> sceneCode.equals(offer.sceneCode())).toList())
+                .set("sceneItems", equipmentRecordService.sceneItems(saveId, sceneCode))
+                .set("npcs", characterService.listPresentNpcs(saveId, sceneCode,
+                        context.save().getTotalTurnNumber())).toString();
         return new ActionContext(saveId, context.character().getId(), context.save().getTotalTurnNumber(), sceneCode,
                 character, scholar, facts);
     }
@@ -811,20 +834,22 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         if (!Objects.equals(command.expectedTurnNumber(), before.turnNumber())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "回合已变化，请读档后重试");
         }
-        String memories = memoryRecordService.recall(saveId, actorId, null,
+        String memories = memoryRecordService.recall(saveId, before.actorId(), null,
                 GameRuleConstant.MEMORY_CONTEXT_MAX_CHARACTERS);
         String facts = JSONUtil.parseObj(before.contextSummary()).set("memoryContext", JSONUtil.parseArray(memories)).toString();
         FreeActionWorkflow.FreeActionResult resolved = freeActionWorkflow.execute(
                 new FreeActionWorkflow.FreeActionCommand(command.text(), facts,
                         before.character(), before.scholar()));
         return new TransactionTemplate(transactionManager).execute(status -> settleAiAction(before, command.requestId(),
-                payload, resolved.settlement(), resolved.acquisitions(), true, resolved.eventSummary(), resolved.lifeMilestone()));
+                payload, resolved.settlement(), resolved.acquisitions(), resolved.npcChanges(), resolved.sceneItemChanges(),
+                true, resolved.eventSummary(), resolved.lifeMilestone()));
     }
 
     @Override
     @Transactional
     public JSONObject settleAiAction(ActionContext before, String requestId, Object payload, DriverResult settlement,
-                                      List<AcquisitionIntent> acquisitions, boolean endTurn, String summary, boolean milestone) {
+                                      List<AcquisitionIntent> acquisitions, List<NpcIntent> npcChanges,
+                                      List<SceneItemChange> sceneItemChanges, boolean endTurn, String summary, boolean milestone) {
         ActorContext context = loadActor(before.saveId(), before.actorId(), true);
         JSONObject previous = eventRecordService.replay(before.saveId(), requestId, payload);
         if (previous != null) {
@@ -836,16 +861,28 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
                 || !scholarState(context.scholar()).equals(before.scholar())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "人物或回合已变化，本次AI结果未结算，请重新发起");
         }
+        JSONObject observedFacts = JSONUtil.parseObj(before.contextSummary());
+        Set<String> observedNpcIds = observedIds(observedFacts, "npcs");
+        observedNpcIds.remove(before.actorId());
+        Set<String> observedItemIds = observedIds(observedFacts, "sceneItems");
         List<JSONObject> trades = new ArrayList<>();
+        Set<String> acquiredSupplierIds = new LinkedHashSet<>();
         List<AcquisitionIntent> intents = acquisitions == null ? List.of() : acquisitions;
         if (intents.stream().anyMatch(Objects::isNull)) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI返回的物品获取列表包含无效内容，请重新发起");
         }
         for (int i = 0; i < intents.size(); i++) {
             AcquisitionIntent intent = intents.get(i);
-            trades.add(equipmentRecordService.acquire(before.saveId(), before.actorId(),
+            JSONObject trade = equipmentRecordService.acquire(before.saveId(), before.actorId(),
                     new AcquisitionCommand(requestId + "/" + i, before.sceneCode(),
-                            intent.supplierNpcCode(), intent.equipmentCode(), intent.quantity())));
+                            intent.supplierNpcCode(), intent.equipmentCode(), intent.quantity()));
+            Character supplier = characterService.lambdaQuery().eq(Character::getSaveId, before.saveId())
+                    .eq(Character::getNpcCode, intent.supplierNpcCode()).one();
+            if (supplier == null) {
+                throw new IllegalStateException("已经执行的交易缺少真实供应者");
+            }
+            acquiredSupplierIds.add(supplier.getId());
+            trades.add(trade.set("supplierId", supplier.getId()).set("supplierNpcCode", supplier.getNpcCode()));
         }
         // 获取行为可能改变钱包，重新读取后再保存属性，避免覆盖刚刚完成的扣款。
         context = loadActor(before.saveId(), before.actorId(), true);
@@ -861,18 +898,45 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         updateById(context.save());
         markIllness(context);
         prepareTriggeredExam(context, turn);
+        advanceIllness(context);
+        // 使用观察时的有效身份，但从全部实际推进后的回合计算新期限。
+        NpcChanges resolvedNpcs = characterService.applyNpcIntents(context.save(), context.character(),
+                before.sceneCode(), requestId, before.turnNumber(), observedNpcIds, npcChanges);
+        List<SceneItem> resolvedItems = equipmentRecordService.applySceneItemChanges(before.saveId(), before.sceneCode(),
+                requestId, before.turnNumber(), context.save().getTotalTurnNumber(), sceneItemChanges, observedItemIds);
+        Set<String> participantIds = new LinkedHashSet<>(resolvedNpcs.participantIds());
+        participantIds.addAll(acquiredSupplierIds);
+        List<String> confirmedParticipants = List.copyOf(participantIds);
         if (milestone && settlement != null) {
             recordMilestone(context, "FREE_ACTION_MILESTONE", summary == null ? "一次重要经历" : summary,
                     Map.of("character", context.character(), "scholarProfile", context.scholar(),
-                            "sceneCode", before.sceneCode(), "executedTrades", trades));
+                            "sceneCode", before.sceneCode(), "executedTrades", trades,
+                            "resolvedNpcs", resolvedNpcs.characters(), "sceneItems", resolvedItems), confirmedParticipants);
         }
-        advanceIllness(context);
         JSONObject result = new JSONObject().set("requestId", requestId).set("actorId", before.actorId())
                 .set("summary", summary == null ? "" : summary).set("trades", trades)
+                .set("resolvedNpcs", resolvedNpcs.characters()).set("sceneItems", resolvedItems)
                 .set("detail", buildDetail(context));
+        // 普通自由行动独立评估记忆；已有重要节点时只记节点，避免同一次经历重复生成。
+        String eventCode = endTurn && !(milestone && settlement != null) ? "FREE_ACTION" : "AI_ACTION";
         eventRecordService.recordOperation(before.saveId(), before.actorId(), requestId, payload,
-                "AI_ACTION", context.save().getTotalTurnNumber(), result);
+                eventCode, context.save().getTotalTurnNumber(), result, confirmedParticipants);
+        characterService.archiveExpired(before.saveId(), context.save().getTotalTurnNumber());
         return result;
+    }
+
+    /** 只从程序实际提供给模型的事实快照提取身份，不接纳模型扩写的已见对象。 */
+    private Set<String> observedIds(JSONObject facts, String field) {
+        Set<String> ids = new LinkedHashSet<>();
+        if (facts.getJSONArray(field) != null) {
+            for (JSONObject item : facts.getJSONArray(field).toList(JSONObject.class)) {
+                String id = item.getStr("id");
+                if (id != null && !id.isBlank()) {
+                    ids.add(id);
+                }
+            }
+        }
+        return ids;
     }
 
     /**
@@ -885,12 +949,23 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
     private void createNpcs(GameSave gameSave, Character player, ScholarState initialScholar) {
         for (JSONObject definition : jsonLoader.load("game/npc.json", JSONObject.class)
                 .getJSONArray("npc").toList(JSONObject.class)) {
+            String npcCode = definition.getStr("npcCode");
             Character existing = characterService.lambdaQuery().eq(Character::getSaveId, gameSave.getId())
-                    .eq(Character::getNpcCode, definition.getStr("npcCode")).one();
+                    .eq(Character::getNpcCode, npcCode).one();
+            if (existing == null && "NPC_DOUBAO".equals(npcCode)) {
+                // 旧存档原位改码，保留人物ID及其钱包、能力、记忆和对话关系。
+                existing = characterService.lambdaQuery().eq(Character::getSaveId, gameSave.getId())
+                        .eq(Character::getNpcCode, "NPC_XIANSHENG").one();
+                if (existing != null) {
+                    characterService.lambdaUpdate().eq(Character::getId, existing.getId())
+                            .set(Character::getNpcCode, npcCode).update();
+                    existing.setNpcCode(npcCode);
+                }
+            }
             if (existing != null) {
                 // 仅替换旧模板身份，保留已有钱包、能力、记忆和自定义姓名。
-                String legacyName = switch (definition.getStr("npcCode")) {
-                    case "NPC_XIANSHENG" -> "私塾先生";
+                String legacyName = switch (npcCode) {
+                    case "NPC_DOUBAO" -> "私塾先生";
                     case "NPC_JIAHAO" -> "隔壁班嘉豪";
                     case "NPC_SHANGREN" -> "书商陆掌柜";
                     default -> null;
@@ -903,7 +978,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
                 continue;
             }
             Character npc = JSONUtil.toBean(JSONUtil.toJsonStr(player), Character.class)
-                    .setId(null).setType(0).setNpcCode(definition.getStr("npcCode"))
+                    .setId(null).setType(0).setNpcCode(npcCode)
                     .setName(definition.getStr("displayName")).setPersonalitySummary(definition.getStr("personalitySummary"))
                     .setWallet(GameRuleConstant.INITIAL_WALLET).setSickTurnsRemaining(0)
                     .setOfficialPosition(null).setOfficialRank(null).setDegree(null).setTitlesJson("[]")
@@ -968,7 +1043,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
     }
 
     /** 同时检查场景的行动许可及NPC行动者的在场关系，玩家可通过界面切换房间。 */
-    private JSONObject requireScene(String sceneCode, Character actor, String actionCode) {
+    private JSONObject requireScene(String sceneCode, Character actor, String actionCode, long turnNumber) {
         JSONObject scene = jsonLoader.load("game/scene.json", JSONObject.class).getJSONArray("scene")
                 .toList(JSONObject.class).stream()
                 .filter(value -> Objects.equals(sceneCode, value.getStr("sceneCode"))).findFirst()
@@ -976,7 +1051,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         if (!scene.getJSONArray("availableActionCode").contains(actionCode)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前场景不能执行该行动");
         }
-        if (actor.getType() == 0 && !scene.getJSONArray("availableNpcCode").contains(actor.getNpcCode())) {
+        if (actor.getType() == 0 && !characterService.isPresent(actor, sceneCode, turnNumber)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "行动人物不在当前场景");
         }
         return scene;

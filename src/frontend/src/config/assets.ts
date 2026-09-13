@@ -14,4 +14,4 @@ import avatar from '@images/characters/default-avatar.svg'
 import book from '@images/equipment/threadbound-book.png'
 
 export const assets = { county, home, bedroom, study, parents, school, classroom, library, bookshop, exam, douBao, shenYan, avatar, book }
-export const portrait = (npcCode?: string | null) => npcCode === 'NPC_XIANSHENG' ? douBao : npcCode === 'NPC_GUANSHU' ? shenYan : avatar
+export const portrait = (npcCode?: string | null) => npcCode === 'NPC_DOUBAO' ? douBao : npcCode === 'NPC_GUANSHU' ? shenYan : avatar

@@ -4,6 +4,8 @@ import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import mvp.engine.CharacterEngine.DriverPatch;
 import mvp.service.EquipmentRecordService.AcquisitionIntent;
+import mvp.service.EquipmentRecordService.SceneItemChange;
+import mvp.service.CharacterService.NpcIntent;
 import org.springframework.stereotype.Component;
 
 import java.io.Serializable;
@@ -44,14 +46,17 @@ public class FreeActionResolver {
     }
 
     public record DialogueResolution(String reply, boolean endDialogue, DriverPatch driverPatch,
-                                     List<AcquisitionIntent> acquisitions) {
+                                     List<AcquisitionIntent> acquisitions, List<NpcIntent> npcChanges,
+                                     List<SceneItemChange> sceneItemChanges) {
     }
 
     public record FreeActionResolution(
             DriverPatch driverPatch,
             String eventSummary,
             boolean lifeMilestone,
-            List<AcquisitionIntent> acquisitions
+            List<AcquisitionIntent> acquisitions,
+            List<NpcIntent> npcChanges,
+            List<SceneItemChange> sceneItemChanges
     ) implements Serializable {
     }
 }

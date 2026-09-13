@@ -19,7 +19,12 @@ public class Character {
     private String saveId; // 人物所属的游戏存档ID
     private String name; // 人物姓名
     private int type;//1为人类玩家，0为NPC。只要不是人类玩家控制的就都是NPC
-    private String npcCode; // NPC模板编码；玩家为空
+    private String npcCode; // NPC模板编码；玩家和动态NPC为空
+    private String retentionLevel = "L2"; // L0临时身份缓存，L1短期保留，L2长期身份
+    private Long expiresAtTurn; // 到此累计回合退出活跃；L2为空
+    private String currentSceneCode; // 动态NPC所在场景，固定NPC使用场景配置
+    private Boolean archived = false; // 归档后保留身份和历史引用，不再日常出场
+    private String retentionReason; // 最近一次实际互动确认的保留依据
     private Integer wallet; // 当前可支配资金，单位为文，与初始家庭背景独立
     private Integer sickTurnsRemaining; // 重病尚需强制经过的回合
     private String officialPosition; // 当前官职名称，尚无任职时为空
