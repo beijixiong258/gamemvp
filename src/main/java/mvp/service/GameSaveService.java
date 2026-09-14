@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.spring.service.IService;
 import mvp.engine.CharacterEngine.CharacterState;
 import mvp.engine.CharacterEngine.DriverResult;
 import mvp.engine.CharacterEngine.ScholarState;
+import mvp.engine.CharacterEngine.ReadingReward;
 import mvp.entity.CareerProfileShusheng;
 import mvp.entity.Character;
 import mvp.entity.EventRecord;
@@ -94,12 +95,12 @@ public interface GameSaveService extends IService<GameSave> {
     List<SaveSummary> listSaves();
 
     /**
-     * 补齐存档缺失的NPC和公共教材定义，并更新旧NPC模板的默认称呼与身份。
-     * 不发放物品、不覆盖公共装备定义，不改写人物成长数据、自定义姓名或历史记忆。
+     * 同步公共教材定义，补齐缺失NPC、旧模板身份与旧存档阅读成长差额。
+     * 保留物品、进度、自定义姓名及历史；返回本次实际补发的属性和书生能力。
      *
      * @param saveId 已完成表结构升级的存档ID
      */
-    void prepareContent(String saveId);
+    ReadingReward prepareContent(String saveId);
 
     /**
      * 玩家与NPC共用的固定行动结算入口。
@@ -123,7 +124,7 @@ public interface GameSaveService extends IService<GameSave> {
      * 为自由行动或对话读取日期、行动者年龄与能力、玩家初始家庭背景及场景事实。
      *
      * @param actorId 玩家或NPC的ID
-     * @return 模型调用前的只读数值快照和事实JSON，家庭背景不代表NPC背景或人物钱包
+     * @return 短事务内补齐旧阅读成长后取得的数值快照和事实JSON，家庭背景不代表NPC背景或人物钱包
      */
     ActionContext prepareAction(String saveId, String actorId, String sceneCode);
 
@@ -197,8 +198,13 @@ public interface GameSaveService extends IService<GameSave> {
             ScholarState abilityGain,
             int fatigueChange,
             int healthChange,
-            Integer diceRoll
+            Integer diceRoll,
+            ReadingReward readingRewardGain
     ) {
+        public ActionChanges(int progressGain, ScholarState abilityGain, int fatigueChange,
+                             int healthChange, Integer diceRoll) {
+            this(progressGain, abilityGain, fatigueChange, healthChange, diceRoll, ReadingReward.ZERO);
+        }
     }
 
     record ActionResult(SaveDetail detail, ActionChanges changes, String feedback) {

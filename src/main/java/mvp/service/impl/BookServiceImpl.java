@@ -5,11 +5,13 @@ import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
+import jakarta.annotation.PostConstruct;
 import mvp.ai.GameClient;
 import mvp.engine.CharacterEngine.BookProgress;
 import mvp.engine.CharacterEngine.BookRule;
 import mvp.engine.CharacterEngine.CharacterState;
 import mvp.engine.CharacterEngine.ReadBookResult;
+import mvp.engine.CharacterEngine.ReadingReward;
 import mvp.engine.CharacterEngine.ScholarState;
 import mvp.engine.CharacterEngine;
 import mvp.entity.Book;
@@ -18,12 +20,14 @@ import mvp.entity.Character;
 import mvp.entity.Equipment;
 import mvp.entity.EquipmentRecord;
 import mvp.entity.GameSave;
+import mvp.entity.EventRecord;
 import mvp.mapper.BookMapper;
 import mvp.service.BookRecordService;
 import mvp.service.BookService;
 import mvp.service.CharacterService;
 import mvp.service.EquipmentRecordService;
 import mvp.service.EquipmentService;
+import mvp.service.EventRecordService;
 import mvp.utils.ClasspathJsonLoader;
 import mvp.utils.Calculator;
 import org.springframework.dao.DuplicateKeyException;
@@ -38,6 +42,8 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Objects;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -61,6 +67,237 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
     private final EquipmentService equipmentService;
     private final EquipmentRecordService equipmentRecordService;
     private final BookRecordService bookRecordService;
+    private final EventRecordService eventRecordService;
+    private static final String REWARD_RECONCILED = "BOOK_REWARDS_RECONCILED";
+    private static final String REWARD_REQUEST_PREFIX = "SYSTEM/BOOK_REWARDS/";
+    private static final List<String> REWARD_FIELDS = List.of("characterZhili", "characterDaode",
+            "characterZhengzhi", "characterJiaoji", "characterTineng", "abilityShizi",
+            "abilityJingyi", "abilityWenzhang", "abilityCelun", "abilityWenxue");
+    private Map<String, ReadingReward> readingRewards;
+
+    @PostConstruct
+    public void loadReadingRewards() {
+        Map<String, ReadingReward> rewards = new HashMap<>();
+        JSONArray definitions = jsonLoader.load("game/book.json", JSONObject.class).getJSONArray("book");
+        if (definitions == null || definitions.isEmpty()) {
+            throw new IllegalStateException("书籍配置缺少book数组");
+        }
+        for (JSONObject definition : definitions.toList(JSONObject.class)) {
+            String code = definition.getStr("equipmentCode");
+            ReadingReward reward = parseReadingReward(definition.getJSONObject("readingReward"), 100);
+            if (code == null || code.isBlank() || rewards.putIfAbsent(code, reward) != null) {
+                throw new IllegalStateException("书籍成长配置编码为空或重复：" + code);
+            }
+        }
+        readingRewards = Map.copyOf(rewards);
+    }
+
+    private ReadingReward parseReadingReward(JSONObject json, int maximum) {
+        if (json == null) {
+            throw new IllegalStateException("缺少书籍成长数据");
+        }
+        int[] values = new int[REWARD_FIELDS.size()];
+        for (int i = 0; i < values.length; i++) {
+            BigDecimal value = json.getBigDecimal(REWARD_FIELDS.get(i));
+            if (value == null || value.signum() < 0 || value.compareTo(BigDecimal.valueOf(maximum)) > 0) {
+                throw new IllegalStateException("书籍成长字段无效：" + REWARD_FIELDS.get(i));
+            }
+            values[i] = value.intValueExact();
+        }
+        return new ReadingReward(values[0], values[1], values[2], values[3], values[4],
+                values[5], values[6], values[7], values[8], values[9]);
+    }
+
+    private ReadingReward configuredReward(String bookCode) {
+        ReadingReward reward = readingRewards.get(bookCode);
+        if (reward == null) {
+            throw new IllegalStateException("书籍缺少完整成长配置：" + bookCode);
+        }
+        return reward;
+    }
+
+    private EventRecord rewardReconciliation(String saveId, String characterId) {
+        return eventRecordService.lambdaQuery().eq(EventRecord::getSaveId, saveId)
+                .eq(EventRecord::getEventCode, REWARD_RECONCILED)
+                .apply("JSON_CONTAINS(related_character_id_json, JSON_QUOTE({0}))", characterId)
+                .orderByDesc(EventRecord::getEventSequence).last("LIMIT 1").one();
+    }
+
+    private Map<String, ReadingReward> recordedRewards(JSONObject json, int maximum) {
+        if (json == null) {
+            throw incompleteReadingHistory();
+        }
+        Map<String, ReadingReward> result = new HashMap<>();
+        try {
+            for (String code : json.keySet()) {
+                result.put(code, parseReadingReward(json.getJSONObject(code), maximum));
+            }
+        } catch (RuntimeException exception) {
+            throw incompleteReadingHistory();
+        }
+        return result;
+    }
+
+    /** 最新核算记录保留已消耗额度；超过现行额度的部分在后续进度中抵足。 */
+    private ReadingReward legacyReward(String saveId, String characterId, String bookCode) {
+        EventRecord reconciliation = rewardReconciliation(saveId, characterId);
+        if (reconciliation == null) {
+            throw new IllegalStateException("请先完成存档阅读成长核算");
+        }
+        return recordedRewards(JSONUtil.parseObj(reconciliation.getSettlementResultJson())
+                .getJSONObject("legacyRewards"), Integer.MAX_VALUE).getOrDefault(bookCode, ReadingReward.ZERO);
+    }
+
+    @Override
+    public ReadingReconciliation reconcileReadingRewards(GameSave save, String characterId,
+                                                          CharacterState character, ScholarState scholar) {
+        // 调用者已锁存档；按最新额度快照判断，切回曾使用的配置也不能重放旧补发。
+        EventRecord previous = rewardReconciliation(save.getId(), characterId);
+        Map<String, ReadingReward> previousBudgets = null;
+        Map<String, ReadingReward> previousCredits = Map.of();
+        boolean restoreEmptyMarker = false;
+        if (previous != null) {
+            JSONObject result = JSONUtil.parseObj(previous.getSettlementResultJson());
+            previousCredits = recordedRewards(result.getJSONObject("legacyRewards"), Integer.MAX_VALUE);
+            JSONObject budgets = result.getJSONObject("rewardBudgets");
+            if (budgets != null) {
+                previousBudgets = recordedRewards(budgets, 100);
+                if (readingRewards.equals(previousBudgets)) {
+                    return null;
+                }
+            } else {
+                // 没有额度快照时，仅可从尚未读书、也未补发的空标记重建后续回执。
+                try {
+                    if (!previousCredits.isEmpty() || !ReadingReward.ZERO.equals(
+                            parseReadingReward(result.getJSONObject("grantedReward"), Integer.MAX_VALUE))) {
+                        throw incompleteReadingBudget();
+                    }
+                } catch (RuntimeException exception) {
+                    throw incompleteReadingBudget();
+                }
+                restoreEmptyMarker = true;
+            }
+        }
+        LibraryContext context = loadLibrary(save, characterId);
+        Map<String, ReadingReward> legacyRewards = new HashMap<>();
+        Map<String, Integer> readCounts = new HashMap<>();
+        Map<String, Integer> progressTotals = new HashMap<>();
+        List<EventRecord> events = eventRecordService.lambdaQuery().eq(EventRecord::getSaveId, save.getId())
+                .in(EventRecord::getEventCode, List.of("READ_BOOK", "BOOK_PLAYER_ANSWER"))
+                .apply("JSON_CONTAINS(related_character_id_json, JSON_QUOTE({0}))", characterId)
+                .orderByAsc(EventRecord::getEventSequence).list();
+        for (EventRecord event : events) {
+            JSONObject result = JSONUtil.parseObj(event.getSettlementResultJson());
+            JSONObject detail = result.getJSONObject("detail");
+            JSONObject actor = detail == null ? null : detail.getJSONObject("character");
+            if (actor == null || !characterId.equals(actor.getStr("id"))) {
+                throw incompleteReadingHistory();
+            }
+            JSONObject payload = JSONUtil.parseObj(event.getRequestPayloadJson());
+            JSONObject command = payload.getJSONObject("command");
+            String code = "READ_BOOK".equals(event.getEventCode())
+                    ? command == null ? null : command.getStr("bookCode") : payload.getStr("bookCode");
+            JSONObject changes = result.getJSONObject("changes");
+            Integer progressGain = changes == null ? null : changes.getInt("progressGain");
+            if (code == null || progressGain == null || progressGain < 0 || progressGain > BOOK_COMPLETION_PROGRESS
+                    || changes.getJSONObject("abilityGain") == null) {
+                throw incompleteReadingHistory();
+            }
+            JSONObject paid = changes.getJSONObject("readingRewardGain");
+            if (paid == null) {
+                paid = new JSONObject();
+                for (String field : REWARD_FIELDS) {
+                    paid.set(field, field.startsWith("ability")
+                            ? changes.getJSONObject("abilityGain").getInt(field) : 0);
+                }
+            }
+            try {
+                ReadingReward credit = parseReadingReward(paid, Integer.MAX_VALUE);
+                if (restoreEmptyMarker) {
+                    ReadingReward allocated = recordedReadingCredit(previous, event, detail, code, progressGain);
+                    if (!allocated.maximum(credit).equals(allocated)) {
+                        throw incompleteReadingBudget();
+                    }
+                    credit = allocated;
+                }
+                legacyRewards.merge(code, credit, ReadingReward::plus);
+                readCounts.merge(code, 1, Math::addExact);
+                progressTotals.merge(code, progressGain, Math::addExact);
+            } catch (ResponseStatusException exception) {
+                throw exception;
+            } catch (RuntimeException exception) {
+                throw incompleteReadingHistory();
+            }
+        }
+        Set<String> progressedBooks = context.progressByEquipmentId().values().stream()
+                .map(progress -> context.equipmentById().get(progress.getEquipmentId()).getEquipmentCode())
+                .collect(Collectors.toSet());
+        if (!progressedBooks.containsAll(readCounts.keySet()) || !progressedBooks.containsAll(previousCredits.keySet())) {
+            throw incompleteReadingHistory();
+        }
+        ReadingReward due = ReadingReward.ZERO;
+        for (BookRecord progress : context.progressByEquipmentId().values()) {
+            String code = context.equipmentById().get(progress.getEquipmentId()).getEquipmentCode();
+            if (!Objects.equals(readCounts.getOrDefault(code, 0), progress.getTotalReadTurnNumber())
+                    || !Objects.equals(progressTotals.getOrDefault(code, 0), progress.getCurrentProgress())) {
+                throw incompleteReadingHistory();
+            }
+            ReadingReward legacy = legacyRewards.getOrDefault(code, ReadingReward.ZERO);
+            if (previousBudgets != null) {
+                ReadingReward oldBudget = previousBudgets.get(code);
+                if (oldBudget == null && progress.getTotalReadTurnNumber() > 0) {
+                    throw incompleteReadingBudget();
+                }
+                ReadingReward consumed = previousCredits.getOrDefault(code, ReadingReward.ZERO).maximum(
+                        (oldBudget == null ? ReadingReward.ZERO : oldBudget).atProgress(progress.getCurrentProgress()));
+                if (!consumed.maximum(legacy).equals(consumed)) {
+                    throw incompleteReadingHistory();
+                }
+                legacy = consumed;
+                legacyRewards.put(code, consumed);
+            }
+            due = due.plus(configuredReward(code).atProgress(progress.getCurrentProgress()).subtractPositive(legacy));
+        }
+        CharacterState characterAfter = characterEngine.applyReadingAttributes(character, due);
+        ScholarState scholarAfter = characterEngine.applyReadingAbilities(scholar, due);
+        ReadingReward granted = characterEngine.readingRewardDifference(character, scholar, characterAfter, scholarAfter);
+        Map<String, Object> result = Map.of("legacyRewards", legacyRewards, "rewardBudgets", readingRewards,
+                "grantedReward", granted);
+        String requestId = REWARD_REQUEST_PREFIX + characterId
+                + (previous == null ? "" : "/" + previous.getEventSequence());
+        eventRecordService.recordOperation(save.getId(), characterId, requestId,
+                new JSONObject().set("operation", REWARD_RECONCILED).set("actorId", characterId),
+                REWARD_RECONCILED, save.getTotalTurnNumber(), result);
+        return new ReadingReconciliation(characterAfter, scholarAfter, granted);
+    }
+
+    /** 旧空标记之后的回执含逐书额度与进度，足以还原包括属性封顶在内的已消耗额度。 */
+    private ReadingReward recordedReadingCredit(EventRecord marker, EventRecord event, JSONObject detail,
+                                                 String bookCode, int progressGain) {
+        if (event.getEventSequence() <= marker.getEventSequence()) {
+            throw incompleteReadingBudget();
+        }
+        JSONArray books = detail.getJSONArray("books");
+        JSONObject book = books == null ? null : books.toList(JSONObject.class).stream()
+                .filter(candidate -> bookCode.equals(candidate.getStr("bookCode"))).findFirst().orElse(null);
+        Integer progress = book == null ? null : book.getInt("currentProgress");
+        if (progress == null || progress < progressGain || progress > BOOK_COMPLETION_PROGRESS
+                || book.getJSONObject("readingReward") == null) {
+            throw incompleteReadingBudget();
+        }
+        ReadingReward budget = parseReadingReward(book.getJSONObject("readingReward"), 100);
+        return budget.atProgress(progress).subtractPositive(budget.atProgress(progress - progressGain));
+    }
+
+    private ResponseStatusException incompleteReadingBudget() {
+        return new ResponseStatusException(HttpStatus.CONFLICT,
+                "旧存档的成长核算记录缺少逐书额度，无法准确处理调参；请核对原始记录，本次未改动进度或属性");
+    }
+
+    private ResponseStatusException incompleteReadingHistory() {
+        return new ResponseStatusException(HttpStatus.CONFLICT,
+                "旧存档的阅读结算记录不完整，无法准确补齐成长；本次未改动进度或属性");
+    }
 
     @Override
     @Transactional
@@ -84,7 +321,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
                 throw new IllegalStateException("书籍缺少readingRequirement数组：" + code);
             }
             configuredBook.setReadingRequirementJson(requirements.toString());
-            bookRule(configuredBook);
+            bookRule(configuredBook, code);
             if (getById(equipment.getId()) == null) {
                 try {
                     baseMapper.insert(configuredBook);
@@ -145,11 +382,12 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
         }
         BookRecord record = context.progressByEquipmentId().get(book.getEquipmentId());
         BookProgress progress = new BookProgress(description.currentProgress(), description.totalReadTurnNumber(),
-                description.completed(), record == null ? null : record.getLastReadTurnNumber());
+                description.completed(), record == null ? null : record.getLastReadTurnNumber(),
+                legacyReward(save.getId(), characterId, bookCode));
         ReadBookResult settlement = score == null
-                ? characterEngine.readBook(character, scholar, bookRule(book), progress,
+                ? characterEngine.readBook(character, scholar, bookRule(book, bookCode), progress,
                         settlementTurnNumber, ThreadLocalRandom.current().nextInt(1, 101))
-                : characterEngine.readBookAsPlayer(character, scholar, bookRule(book), progress,
+                : characterEngine.readBookAsPlayer(character, scholar, bookRule(book, bookCode), progress,
                         settlementTurnNumber, score);
         if (record == null) {
             record = new BookRecord().setCharacterId(characterId).setEquipmentId(book.getEquipmentId());
@@ -264,8 +502,8 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
     private LibraryBook describeBook(
             Book book, GameSave save, CharacterState character, ScholarState scholar, LibraryContext context
     ) {
-        bookRule(book);
         Equipment equipment = context.equipmentById().get(book.getEquipmentId());
+        bookRule(book, equipment.getEquipmentCode());
         BookRecord progress = context.progressByEquipmentId().get(book.getEquipmentId());
         int currentProgress = progress == null ? 0 : progress.getCurrentProgress();
         boolean completed = currentProgress >= BOOK_COMPLETION_PROGRESS;
@@ -318,29 +556,25 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
                 Boolean.TRUE.equals(book.getPlayerReadingEnabled()), List.copyOf(reasons),
                 book.getKnowledgeSummary(), context.ownedQuantities().getOrDefault(book.getEquipmentId(), 0),
                 equipment.getPrice(), equipment.getSupplierNpcCode(), book.getTotalKnowledge(),
-                characterEngine.knowledgeContribution(book.getTotalKnowledge(), currentProgress));
+                characterEngine.knowledgeContribution(book.getTotalKnowledge(), currentProgress),
+                configuredReward(equipment.getEquipmentCode()));
     }
 
     /**
-     * 检查书籍规则的必要数值并生成引擎输入，未知成长领域不得套用书生算法。
+     * 检查书籍数值并组合资源中的完整成长额度，未知领域不得套用书生算法。
      *
      * @param book 数据库或资源中的书籍规则
      * @return 阅读引擎需要的数值快照
      */
-    private BookRule bookRule(Book book) {
+    private BookRule bookRule(Book book, String bookCode) {
         if (!SCHOLAR_DOMAIN.equals(book.getGrowthDomainCode())) {
             throw new IllegalStateException("当前阅读引擎不支持成长领域：" + book.getGrowthDomainCode());
         }
-        BookRule rule = new BookRule(book.getAbilityShiziWeight(), book.getAbilityJingyiWeight(), book.getAbilityWenzhangWeight(),
-                book.getAbilityCelunWeight(), book.getAbilityWenxueWeight(), book.getFatigueCost());
         if (book.getTotalKnowledge() == null || book.getTotalKnowledge() < 0
-                || rule.fatigueCost() < 0 || rule.abilityShiziWeight() < 0 || rule.abilityJingyiWeight() < 0
-                || rule.abilityWenzhangWeight() < 0 || rule.abilityCelunWeight() < 0 || rule.abilityWenxueWeight() < 0
-                || rule.abilityShiziWeight() + rule.abilityJingyiWeight() + rule.abilityWenzhangWeight()
-                + rule.abilityCelunWeight() + rule.abilityWenxueWeight() != 100) {
-            throw new IllegalStateException("书籍阅读数值或能力权重配置错误：" + book.getEquipmentId());
+                || book.getFatigueCost() == null || book.getFatigueCost() < 0) {
+            throw new IllegalStateException("书籍阅读数值配置错误：" + bookCode);
         }
-        return rule;
+        return new BookRule(configuredReward(bookCode), book.getFatigueCost());
     }
 
     private String readingRequirementLabel(String target) {

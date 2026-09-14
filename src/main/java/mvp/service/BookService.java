@@ -3,6 +3,7 @@ package mvp.service;
 import com.baomidou.mybatisplus.spring.service.IService;
 import mvp.engine.CharacterEngine.CharacterState;
 import mvp.engine.CharacterEngine.ScholarState;
+import mvp.engine.CharacterEngine.ReadingReward;
 import mvp.engine.CharacterEngine;
 import mvp.entity.Book;
 import mvp.entity.GameSave;
@@ -12,8 +13,15 @@ import java.util.List;
 
 public interface BookService extends IService<Book> {
 
-    /** 开局时只导入缺失的公共书籍定义，不向任何人物发放物品。 */
+    /** 同步公共书籍定义，不向任何人物发放物品。 */
     void importDefinitions();
+
+    /** 在调用方持有存档行锁的事务中，按历史阅读事件与额度快照核算收益；现行额度已核对时返回null。 */
+    ReadingReconciliation reconcileReadingRewards(GameSave save, String characterId,
+                                                   CharacterState character, ScholarState scholar);
+
+    record ReadingReconciliation(CharacterState character, ScholarState scholar, ReadingReward grantedReward) {
+    }
 
     /**
      * 汇总人物全部书籍的学识，持有多本同名物品不重复累计。
@@ -74,7 +82,8 @@ public interface BookService extends IService<Book> {
             int price,
             String supplierNpcCode,
             int totalKnowledge,
-            BigDecimal acquiredKnowledge
+            BigDecimal acquiredKnowledge,
+            ReadingReward readingReward
     ) {
     }
 

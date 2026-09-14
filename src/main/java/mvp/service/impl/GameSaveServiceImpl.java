@@ -9,6 +9,7 @@ import mvp.ai.FreeActionWorkflow;
 import mvp.engine.CharacterEngine.CharacterState;
 import mvp.engine.CharacterEngine.DriverResult;
 import mvp.engine.CharacterEngine.ScholarState;
+import mvp.engine.CharacterEngine.ReadingReward;
 import mvp.engine.CharacterEngine;
 import mvp.engine.GameRuleConstant;
 import mvp.engine.TurnEngine;
@@ -277,7 +278,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
             CharacterState after = characterState(context.character());
             ActionChanges changes = new ActionChanges(reading.progressGain(), reading.abilityGain(),
                     after.characterPilao() - before.character().characterPilao(),
-                    after.characterJiankang() - before.character().characterJiankang(), null);
+                    after.characterJiankang() - before.character().characterJiankang(), null, reading.readingRewardGain());
             JSONObject response = JSONUtil.parseObj(new ActionResult(buildDetail(context), changes,
                     "你写下了对《" + result.bookName() + "》的体会，阅读进度增加" + reading.progressGain() + "。"))
                     .set("questionId", command.questionId()).set("bookCode", bookCode)
@@ -450,7 +451,8 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
                 abilityDifference(scholarBefore, scholarAfter),
                 characterAfter.characterPilao() - characterBefore.characterPilao(),
                 characterAfter.characterJiankang() - characterBefore.characterJiankang(),
-                reading == null ? null : reading.diceRoll()
+                reading == null ? null : reading.diceRoll(),
+                reading == null ? ReadingReward.ZERO : reading.readingRewardGain()
         );
         if (reading != null) {
             Map<String, Object> settlement = Map.of(
@@ -472,7 +474,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         CharacterState finalCharacter = characterState(context.character());
         changes = new ActionChanges(changes.progressGain(), changes.abilityGain(),
                 finalCharacter.characterPilao() - characterBefore.characterPilao(),
-                finalCharacter.characterJiankang() - characterBefore.characterJiankang(), changes.diceRoll());
+                finalCharacter.characterJiankang() - characterBefore.characterJiankang(), changes.diceRoll(), changes.readingRewardGain());
         JSONObject result = JSONUtil.parseObj(new ActionResult(
                 buildDetail(context), changes,
                 renderFeedback(action.getStr("feedbackTextCode"), feedbackValues)
@@ -623,7 +625,19 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         if (scholar == null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "存档缺少书生领域档案");
         }
-        return new ActorContext(gameSave, character, scholar);
+        ReadingReward restoredReward = ReadingReward.ZERO;
+        if (forUpdate) {
+            BookService.ReadingReconciliation reconciliation = bookService.reconcileReadingRewards(
+                    gameSave, character.getId(), characterState(character), scholarState(scholar));
+            if (reconciliation != null) {
+                applyCharacterState(character, reconciliation.character());
+                applyScholarState(scholar, reconciliation.scholar());
+                characterService.updateById(character);
+                careerProfileShushengService.updateById(scholar);
+                restoredReward = reconciliation.grantedReward();
+            }
+        }
+        return new ActorContext(gameSave, character, scholar, restoredReward);
     }
 
     /**
@@ -781,9 +795,9 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public ActionContext prepareAction(String saveId, String actorId, String sceneCode) {
-        ActorContext context = loadActor(saveId, actorId, false);
+        ActorContext context = loadActor(saveId, actorId, true);
         if (!"STUDYING".equals(context.save().getStatus()) || context.character().getCharacterJiankang() <= 0
                 || context.character().getSickTurnsRemaining() > 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "请先完成考试或重病休养");
@@ -827,10 +841,9 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         if (previous != null) {
             return previous;
         }
-        // 类内调用不会触发prepareAction的事务注解，显式保证多次查询使用同一读取事务。
-        TransactionTemplate readTransaction = new TransactionTemplate(transactionManager);
-        readTransaction.setReadOnly(true);
-        ActionContext before = readTransaction.execute(status -> prepareAction(saveId, actorId, command.sceneCode()));
+        // 类内调用显式开启短事务，先补齐旧阅读成长，再取快照；模型调用仍在锁外。
+        ActionContext before = new TransactionTemplate(transactionManager)
+                .execute(status -> prepareAction(saveId, actorId, command.sceneCode()));
         if (!Objects.equals(command.expectedTurnNumber(), before.turnNumber())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "回合已变化，请读档后重试");
         }
@@ -1059,10 +1072,11 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
 
     @Override
     @Transactional
-    public void prepareContent(String saveId) {
+    public ReadingReward prepareContent(String saveId) {
         ActorContext context = loadPlayer(saveId, true);
         bookService.importDefinitions();
         createNpcs(context.save(), context.character(), characterEngine.startLife(context.character().getBirthRegionId()).scholar());
+        return context.restoredReadingReward();
     }
 
     private record PlayerReadingAttempt(String actorId, long turnNumber, String sceneCode, CharacterState character,
@@ -1076,6 +1090,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
     private record ExamAttempt(ExamRecord exam, String characterContext) {
     }
 
-    private record ActorContext(GameSave save, Character character, CareerProfileShusheng scholar) {
+    private record ActorContext(GameSave save, Character character, CareerProfileShusheng scholar,
+                                ReadingReward restoredReadingReward) {
     }
 }

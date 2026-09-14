@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.function.IntBinaryOperator;
 
 import static mvp.engine.GameRuleConstant.BOOK_COMPLETION_PROGRESS;
 import static mvp.engine.GameRuleConstant.PLAYER_READING_MAX_PROGRESS;
@@ -146,10 +147,10 @@ public class CharacterEngine {
         } else if (diceRoll == 100) {
             progressGain = remainingProgress;
         }
-        return settleReading(character, scholar, book, progress, settlementTurnNumber, studyAmount, progressGain, diceRoll);
+        return settleReading(character, scholar, book, progress, settlementTurnNumber, progressGain, diceRoll);
     }
 
-    /** 以身入局将0至100分线性换算为10至90点进度；能力和疲劳仍按一次普通读书计算。 */
+    /** 以身入局将0至100分线性换算为10至90点进度；成长按实际新增进度发放，疲劳按一次阅读计算。 */
     public ReadBookResult readBookAsPlayer(
             CharacterState character, ScholarState scholar, BookRule book, BookProgress progress,
             long settlementTurnNumber, int score
@@ -159,9 +160,8 @@ public class CharacterEngine {
                 Calculator.ratio(boundedScore)
                         .multiply(BigDecimal.valueOf(PLAYER_READING_MAX_PROGRESS - PLAYER_READING_MIN_PROGRESS))
         );
-        BigDecimal studyAmount = readingStudyAmount(character);
         int remainingProgress = Math.max(0, BOOK_COMPLETION_PROGRESS - progress.currentProgress());
-        return settleReading(character, scholar, book, progress, settlementTurnNumber, studyAmount,
+        return settleReading(character, scholar, book, progress, settlementTurnNumber,
                 Math.min(remainingProgress, awardedProgress), null);
     }
 
@@ -173,7 +173,7 @@ public class CharacterEngine {
 
     private ReadBookResult settleReading(
             CharacterState character, ScholarState scholar, BookRule book, BookProgress progress,
-            long settlementTurnNumber, BigDecimal studyAmount, int progressGain, Integer diceRoll
+            long settlementTurnNumber, int progressGain, Integer diceRoll
     ) {
         if (progress.currentProgress() >= BOOK_COMPLETION_PROGRESS) {
             throw new IllegalArgumentException("这本书已完成，不能继续阅读");
@@ -184,44 +184,27 @@ public class CharacterEngine {
                 progress.currentProgress() + progressGain
         );
 
-        BigDecimal weightedAbility = weightedAbility(scholar, book);
-        BigDecimal diminishingFactor = Calculator.clamp(
-                Calculator.decimal("0.20"),
-                Calculator.ONE,
-                Calculator.ONE.subtract(
-                        weightedAbility.divide(Calculator.decimal("120"), 8, RoundingMode.HALF_UP)
-                )
-        );
-        BigDecimal learningPool = Calculator.decimal("0.50")
-                .add(Calculator.decimal("0.20").multiply(studyAmount))
-                .multiply(diminishingFactor);
-        if (Integer.valueOf(1).equals(diceRoll)) {
-            learningPool = BigDecimal.ZERO;
-        }
-
-        ScholarState roundedGain = new ScholarState(
-                abilityGain(learningPool, book.abilityShiziWeight()),
-                abilityGain(learningPool, book.abilityJingyiWeight()),
-                abilityGain(learningPool, book.abilityWenzhangWeight()),
-                abilityGain(learningPool, book.abilityCelunWeight()),
-                abilityGain(learningPool, book.abilityWenxueWeight())
-        );
-        ScholarState scholarAfter = applyAbilityGain(scholar, roundedGain);
-        ScholarState appliedGain = difference(scholar, scholarAfter);
-
+        ReadingReward alreadyEarned = book.readingReward().atProgress(progress.currentProgress())
+                .maximum(progress.legacyReward());
+        ReadingReward reward = book.readingReward().atProgress(progressAfter).subtractPositive(alreadyEarned);
+        // 骰点1没有新增进度，因此不会重复发放成长；疲劳仍按行动前的身体状态计算。
         WorkCondition workCondition = settleWorkCondition(character, book.fatigueCost());
+        CharacterState characterAfter = applyReadingAttributes(workCondition.characterAfter(), reward);
+        ScholarState scholarAfter = applyReadingAbilities(scholar, reward);
+        ScholarState appliedGain = difference(scholar, scholarAfter);
+        ReadingReward appliedReward = readingRewardDifference(character, scholar, characterAfter, scholarAfter);
         BookProgress progressAfterState = new BookProgress(
                 progressAfter,
                 progress.totalReadTurnNumber() + 1,
                 progressAfter >= BOOK_COMPLETION_PROGRESS,
-                settlementTurnNumber
+                settlementTurnNumber, progress.legacyReward()
         );
         return new ReadBookResult(
-                workCondition.characterAfter(),
+                characterAfter,
                 scholarAfter,
                 progressAfterState,
                 progressGain,
-                appliedGain,
+                appliedGain, appliedReward,
                 workCondition.fatigueGain(),
                 workCondition.exhaustionDamage(),
                 diceRoll,
@@ -352,26 +335,35 @@ public class CharacterEngine {
         return new DriverResult(characterAfter, scholarAfter, exhaustionDamage);
     }
 
-    /**
-     * 按书籍能力权重计算人物当前的综合书生能力。
-     *
-     * @return 加权后的能力值
-     */
-    private BigDecimal weightedAbility(ScholarState scholar, BookRule book) {
-        return BigDecimal.valueOf(scholar.abilityShizi()).multiply(Calculator.ratio(book.abilityShiziWeight()))
-                .add(BigDecimal.valueOf(scholar.abilityJingyi()).multiply(Calculator.ratio(book.abilityJingyiWeight())))
-                .add(BigDecimal.valueOf(scholar.abilityWenzhang()).multiply(Calculator.ratio(book.abilityWenzhangWeight())))
-                .add(BigDecimal.valueOf(scholar.abilityCelun()).multiply(Calculator.ratio(book.abilityCelunWeight())))
-                .add(BigDecimal.valueOf(scholar.abilityWenxue()).multiply(Calculator.ratio(book.abilityWenxueWeight())));
+    /** 书籍成长只受0～100属性范围约束，不经过AI单次变化上限。 */
+    public CharacterState applyReadingAttributes(CharacterState current, ReadingReward reward) {
+        return new CharacterState(
+                Calculator.clamp(0, 100, current.characterZhili() + reward.characterZhili()),
+                Calculator.clamp(0, 100, current.characterDaode() + reward.characterDaode()),
+                Calculator.clamp(0, 100, current.characterZhengzhi() + reward.characterZhengzhi()),
+                Calculator.clamp(0, 100, current.characterJiaoji() + reward.characterJiaoji()),
+                Calculator.clamp(0, 100, current.characterTineng() + reward.characterTineng()),
+                current.characterJiankang(), current.characterPilao());
     }
 
-    /**
-     * 从本回合学习池中计算一项能力的整数增长。
-     *
-     * @return 四舍五入后的非负能力增长
-     */
-    private int abilityGain(BigDecimal learningPool, int weightPercentage) {
-        return Math.max(0, Calculator.roundToInt(learningPool.multiply(Calculator.ratio(weightPercentage))));
+    public ScholarState applyReadingAbilities(ScholarState current, ReadingReward reward) {
+        return applyAbilityGain(current, new ScholarState(reward.abilityShizi(), reward.abilityJingyi(),
+                reward.abilityWenzhang(), reward.abilityCelun(), reward.abilityWenxue()));
+    }
+
+    /** 返回实际到账的成长，达到100上限的部分不重复补发。 */
+    public ReadingReward readingRewardDifference(CharacterState before, ScholarState scholarBefore,
+                                                  CharacterState after, ScholarState scholarAfter) {
+        return new ReadingReward(after.characterZhili() - before.characterZhili(),
+                after.characterDaode() - before.characterDaode(),
+                after.characterZhengzhi() - before.characterZhengzhi(),
+                after.characterJiaoji() - before.characterJiaoji(),
+                after.characterTineng() - before.characterTineng(),
+                scholarAfter.abilityShizi() - scholarBefore.abilityShizi(),
+                scholarAfter.abilityJingyi() - scholarBefore.abilityJingyi(),
+                scholarAfter.abilityWenzhang() - scholarBefore.abilityWenzhang(),
+                scholarAfter.abilityCelun() - scholarBefore.abilityCelun(),
+                scholarAfter.abilityWenxue() - scholarBefore.abilityWenxue());
     }
 
     /**
@@ -535,21 +527,45 @@ public class CharacterEngine {
     ) {
     }
 
-    public record BookRule(
-            int abilityShiziWeight,
-            int abilityJingyiWeight,
-            int abilityWenzhangWeight,
-            int abilityCelunWeight,
-            int abilityWenxueWeight,
-            int fatigueCost
-    ) {
+    /** 每本书的完整成长额度；旧收益也用同一结构保存，独立于当前人物属性。 */
+    public record ReadingReward(
+            int characterZhili, int characterDaode, int characterZhengzhi, int characterJiaoji, int characterTineng,
+            int abilityShizi, int abilityJingyi, int abilityWenzhang, int abilityCelun, int abilityWenxue
+    ) implements Serializable {
+        public static final ReadingReward ZERO = new ReadingReward(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+        public ReadingReward atProgress(int progress) {
+            int bounded = Calculator.clamp(0, BOOK_COMPLETION_PROGRESS, progress);
+            return combine(ZERO, (value, ignored) -> value * bounded / BOOK_COMPLETION_PROGRESS);
+        }
+
+        public ReadingReward plus(ReadingReward other) { return combine(other, Math::addExact); }
+        public ReadingReward maximum(ReadingReward other) { return combine(other, Math::max); }
+        public ReadingReward subtractPositive(ReadingReward other) {
+            return combine(other, (value, paid) -> Math.max(0, value - paid));
+        }
+
+        private ReadingReward combine(ReadingReward other, IntBinaryOperator operation) {
+            return new ReadingReward(
+                    operation.applyAsInt(characterZhili, other.characterZhili),
+                    operation.applyAsInt(characterDaode, other.characterDaode),
+                    operation.applyAsInt(characterZhengzhi, other.characterZhengzhi),
+                    operation.applyAsInt(characterJiaoji, other.characterJiaoji),
+                    operation.applyAsInt(characterTineng, other.characterTineng),
+                    operation.applyAsInt(abilityShizi, other.abilityShizi),
+                    operation.applyAsInt(abilityJingyi, other.abilityJingyi),
+                    operation.applyAsInt(abilityWenzhang, other.abilityWenzhang),
+                    operation.applyAsInt(abilityCelun, other.abilityCelun),
+                    operation.applyAsInt(abilityWenxue, other.abilityWenxue));
+        }
+    }
+
+    public record BookRule(ReadingReward readingReward, int fatigueCost) {
     }
 
     public record BookProgress(
-            int currentProgress,
-            int totalReadTurnNumber,
-            boolean completed,
-            Long lastReadTurnNumber
+            int currentProgress, int totalReadTurnNumber, boolean completed, Long lastReadTurnNumber,
+            ReadingReward legacyReward
     ) {
     }
 
@@ -559,6 +575,7 @@ public class CharacterEngine {
             BookProgress progress,
             int progressGain,
             ScholarState abilityGain,
+            ReadingReward readingRewardGain,
             int fatigueGain,
             int exhaustionDamage,
             Integer diceRoll,

@@ -18,11 +18,15 @@ export interface Scholar {
   abilityWenzhang: number; abilityCelun: number; abilityWenxue: number
 }
 export interface FamilyBackground { id: string; saveId: string; initialWealth: number; backgroundSummary: string }
+export interface ReadingReward {
+  characterZhili: number; characterDaode: number; characterZhengzhi: number; characterJiaoji: number; characterTineng: number
+  abilityShizi: number; abilityJingyi: number; abilityWenzhang: number; abilityCelun: number; abilityWenxue: number
+}
 export interface LibraryBook {
   bookCode: string; bookName: string; equipmentId: string; rarityCode: string; rarityName: string; rarityColor: string
   currentProgress: number; requiredProgress: number; totalReadTurnNumber: number; completed: boolean
   readable: boolean; playerReadingEnabled: boolean; blockedReasons: string[]; knowledgeSummary: string
-  ownedQuantity: number; price: number; supplierNpcCode: string; totalKnowledge: number; acquiredKnowledge: number
+  ownedQuantity: number; price: number; supplierNpcCode: string; totalKnowledge: number; acquiredKnowledge: number; readingReward: ReadingReward
 }
 export interface Exam {
   id: string; saveId: string; characterId: string; examType: string; questionText: string
@@ -73,7 +77,7 @@ export interface Scene { sceneCode: string; sceneName: string; description: stri
 export interface OperationResult {
   detail?: SaveDetail; dialogue?: Dialogue; reply?: string; summary?: string; feedback?: string
   changes?: { progressGain: number; fatigueChange: number; healthChange: number; diceRoll: number | null
-    abilityGain: Record<string, number> }
+    abilityGain: Record<string, number>; readingRewardGain?: ReadingReward }
   applied?: { detail: SaveDetail; summary: string; trades: { equipmentName: string; quantity: number; cost: number }[] }
   exam?: Exam; score?: number; evaluation?: string; equipmentName?: string; quantity?: number; cost?: number
 }

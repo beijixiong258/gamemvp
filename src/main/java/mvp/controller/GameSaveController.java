@@ -1,6 +1,7 @@
 package mvp.controller;
 
 import lombok.RequiredArgsConstructor;
+import mvp.engine.CharacterEngine.ReadingReward;
 import mvp.entity.FamilyBackground;
 import mvp.entity.Region;
 import mvp.service.FamilyBackgroundService;
@@ -37,10 +38,10 @@ public class GameSaveController {
         return gameSaveService.listSaves();
     }
 
-    /** 已有存档显式补齐NPC和教材定义，不自动获取任何物品。 */
+    /** 补齐NPC、教材定义及旧阅读成长，返回本次实际补发；不获取物品或推进时间。 */
     @PostMapping("/{saveId}/content")
-    public void prepareContent(@PathVariable String saveId) {
-        gameSaveService.prepareContent(saveId);
+    public ReadingReward prepareContent(@PathVariable String saveId) {
+        return gameSaveService.prepareContent(saveId);
     }
 
     /**

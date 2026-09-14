@@ -17,7 +17,19 @@
       "abilityWenxueWeight": 0,
       "fatigueCost": 2,
       "totalKnowledge": 20,
-      "knowledgeSummary": "能够熟练运用书中的常用字句和基础训诫。"
+      "knowledgeSummary": "能够熟练运用书中的常用字句和基础训诫。",
+      "readingReward": {
+        "characterZhili": 3,
+        "characterDaode": 1,
+        "characterZhengzhi": 0,
+        "characterJiaoji": 0,
+        "characterTineng": 0,
+        "abilityShizi": 10,
+        "abilityJingyi": 3,
+        "abilityWenzhang": 0,
+        "abilityCelun": 0,
+        "abilityWenxue": 0
+      }
     },
     {
       "equipmentCode": "BOOK_QIANZIWEN",
@@ -36,7 +48,19 @@
       "abilityWenxueWeight": 40,
       "fatigueCost": 2,
       "totalKnowledge": 20,
-      "knowledgeSummary": "能够熟练引用其中字句并理解篇章脉络。"
+      "knowledgeSummary": "能够熟练引用其中字句并理解篇章脉络。",
+      "readingReward": {
+        "characterZhili": 2,
+        "characterDaode": 0,
+        "characterZhengzhi": 0,
+        "characterJiaoji": 0,
+        "characterTineng": 0,
+        "abilityShizi": 10,
+        "abilityJingyi": 0,
+        "abilityWenzhang": 0,
+        "abilityCelun": 0,
+        "abilityWenxue": 5
+      }
     },
     {
       "equipmentCode": "BOOK_LUNYU",
@@ -50,7 +74,7 @@
         {
           "type": "MIN_CAREER_ABILITY",
           "target": "abilityShizi",
-          "value": 20
+          "value": 13
         },
         {
           "type": "BOOK_PROGRESS",
@@ -65,7 +89,19 @@
       "abilityWenxueWeight": 0,
       "fatigueCost": 3,
       "totalKnowledge": 40,
-      "knowledgeSummary": "能够结合多篇章句完整讨论学习、仁德和礼的关系。"
+      "knowledgeSummary": "能够结合多篇章句完整讨论学习、仁德和礼的关系。",
+      "readingReward": {
+        "characterZhili": 5,
+        "characterDaode": 4,
+        "characterZhengzhi": 3,
+        "characterJiaoji": 1,
+        "characterTineng": 0,
+        "abilityShizi": 0,
+        "abilityJingyi": 10,
+        "abilityWenzhang": 5,
+        "abilityCelun": 3,
+        "abilityWenxue": 0
+      }
     },
     {
       "equipmentCode": "BOOK_MENGZI",
@@ -79,12 +115,12 @@
         {
           "type": "MIN_GENERAL_ATTRIBUTE",
           "target": "characterZhili",
-          "value": 40
+          "value": 30
         },
         {
           "type": "MIN_CAREER_ABILITY",
           "target": "abilityShizi",
-          "value": 45
+          "value": 25
         },
         {
           "type": "BOOK_PROGRESS",
@@ -99,7 +135,19 @@
       "abilityWenxueWeight": 0,
       "fatigueCost": 5,
       "totalKnowledge": 60,
-      "knowledgeSummary": "能够援引篇章并完整辨析义利、民本和修养问题。"
+      "knowledgeSummary": "能够援引篇章并完整辨析义利、民本和修养问题。",
+      "readingReward": {
+        "characterZhili": 3,
+        "characterDaode": 3,
+        "characterZhengzhi": 4,
+        "characterJiaoji": 0,
+        "characterTineng": 0,
+        "abilityShizi": 0,
+        "abilityJingyi": 9,
+        "abilityWenzhang": 8,
+        "abilityCelun": 5,
+        "abilityWenxue": 0
+      }
     },
     {
       "equipmentCode": "BOOK_DAXUE",
@@ -113,12 +161,12 @@
         {
           "type": "MIN_GENERAL_ATTRIBUTE",
           "target": "characterZhili",
-          "value": 45
+          "value": 33
         },
         {
           "type": "MIN_GENERAL_ATTRIBUTE",
           "target": "characterZhengzhi",
-          "value": 25
+          "value": 23
         }
       ],
       "abilityShiziWeight": 0,
@@ -128,7 +176,19 @@
       "abilityWenxueWeight": 0,
       "fatigueCost": 4,
       "totalKnowledge": 50,
-      "knowledgeSummary": "能够完整运用格物、诚意、修身等脉络分析治事问题。"
+      "knowledgeSummary": "能够完整运用格物、诚意、修身等脉络分析治事问题。",
+      "readingReward": {
+        "characterZhili": 2,
+        "characterDaode": 2,
+        "characterZhengzhi": 5,
+        "characterJiaoji": 0,
+        "characterTineng": 0,
+        "abilityShizi": 0,
+        "abilityJingyi": 5,
+        "abilityWenzhang": 5,
+        "abilityCelun": 10,
+        "abilityWenxue": 0
+      }
     },
     {
       "equipmentCode": "BOOK_SHIJING",
@@ -142,12 +202,12 @@
         {
           "type": "MIN_GENERAL_ATTRIBUTE",
           "target": "characterZhili",
-          "value": 40
+          "value": 30
         },
         {
           "type": "MIN_CAREER_ABILITY",
           "target": "abilityShizi",
-          "value": 35
+          "value": 20
         }
       ],
       "abilityShiziWeight": 0,
@@ -157,7 +217,19 @@
       "abilityWenxueWeight": 70,
       "fatigueCost": 4,
       "totalKnowledge": 45,
-      "knowledgeSummary": "能够恰当地引用诗句并分析其中的人情与讽谏。"
+      "knowledgeSummary": "能够恰当地引用诗句并分析其中的人情与讽谏。",
+      "readingReward": {
+        "characterZhili": 3,
+        "characterDaode": 0,
+        "characterZhengzhi": 0,
+        "characterJiaoji": 1,
+        "characterTineng": 0,
+        "abilityShizi": 0,
+        "abilityJingyi": 3,
+        "abilityWenzhang": 3,
+        "abilityCelun": 0,
+        "abilityWenxue": 10
+      }
     },
     {
       "equipmentCode": "BOOK_MINGJIAWENCHAO",
@@ -171,12 +243,12 @@
         {
           "type": "MIN_GENERAL_ATTRIBUTE",
           "target": "characterZhili",
-          "value": 55
+          "value": 38
         },
         {
           "type": "MIN_CAREER_ABILITY",
           "target": "abilityWenzhang",
-          "value": 35
+          "value": 18
         }
       ],
       "abilityShiziWeight": 0,
@@ -186,7 +258,19 @@
       "abilityWenxueWeight": 15,
       "fatigueCost": 6,
       "totalKnowledge": 70,
-      "knowledgeSummary": "能够根据题意选择章法并形成完整、连贯的论说。"
+      "knowledgeSummary": "能够根据题意选择章法并形成完整、连贯的论说。",
+      "readingReward": {
+        "characterZhili": 2,
+        "characterDaode": 0,
+        "characterZhengzhi": 0,
+        "characterJiaoji": 0,
+        "characterTineng": 0,
+        "abilityShizi": 0,
+        "abilityJingyi": 0,
+        "abilityWenzhang": 10,
+        "abilityCelun": 5,
+        "abilityWenxue": 5
+      }
     },
     {
       "growthDomainCode": "DOMAIN_SHUSHENG",
@@ -205,7 +289,19 @@
       "abilityWenxueWeight": 10,
       "fatigueCost": 4,
       "totalKnowledge": 100,
-      "knowledgeSummary": "以具体钱粮、河工和治事案例训练策论及文章组织。"
+      "knowledgeSummary": "以具体钱粮、河工和治事案例训练策论及文章组织。",
+      "readingReward": {
+        "characterZhili": 3,
+        "characterDaode": 0,
+        "characterZhengzhi": 4,
+        "characterJiaoji": 0,
+        "characterTineng": 0,
+        "abilityShizi": 0,
+        "abilityJingyi": 3,
+        "abilityWenzhang": 8,
+        "abilityCelun": 13,
+        "abilityWenxue": 3
+      }
     },
     {
       "growthDomainCode": "DOMAIN_SHUSHENG",
@@ -224,7 +320,19 @@
       "abilityWenxueWeight": 0,
       "fatigueCost": 4,
       "totalKnowledge": 120,
-      "knowledgeSummary": "比较题意、破题与承题的结构，掌握更有效的考场行文方式。"
+      "knowledgeSummary": "比较题意、破题与承题的结构，掌握更有效的考场行文方式。",
+      "readingReward": {
+        "characterZhili": 2,
+        "characterDaode": 0,
+        "characterZhengzhi": 0,
+        "characterJiaoji": 0,
+        "characterTineng": 0,
+        "abilityShizi": 0,
+        "abilityJingyi": 8,
+        "abilityWenzhang": 13,
+        "abilityCelun": 3,
+        "abilityWenxue": 0
+      }
     },
     {
       "growthDomainCode": "DOMAIN_SHUSHENG",
@@ -237,7 +345,7 @@
         {
           "type": "MIN_GENERAL_ATTRIBUTE",
           "target": "characterZhili",
-          "value": 40
+          "value": 30
         }
       ],
       "equipmentCode": "BOOK_GPT1_WEIGHTS",
@@ -248,7 +356,19 @@
       "abilityWenxueWeight": 10,
       "fatigueCost": 6,
       "totalKnowledge": 180,
-      "knowledgeSummary": "权重原书内容是模型参数而非自然语言百科。游戏将研读数字天书抽象为推演与表达能力成长；纸笔推理指南讲解嵌入、注意力、前馈层与输出概率，不能把模型当作会替你作答的随身智能体。"
+      "knowledgeSummary": "权重原书内容是模型参数而非自然语言百科。游戏将研读数字天书抽象为推演与表达能力成长；纸笔推理指南讲解嵌入、注意力、前馈层与输出概率，不能把模型当作会替你作答的随身智能体。",
+      "readingReward": {
+        "characterZhili": 4,
+        "characterDaode": 0,
+        "characterZhengzhi": 0,
+        "characterJiaoji": 0,
+        "characterTineng": 0,
+        "abilityShizi": 0,
+        "abilityJingyi": 0,
+        "abilityWenzhang": 5,
+        "abilityCelun": 15,
+        "abilityWenxue": 3
+      }
     }
   ]
 }

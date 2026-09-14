@@ -1,8 +1,9 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { ApiError, request, segment } from '../api/http'
+import { formatReadingReward } from '../config/reading'
 import type { Dialogue, FamilyBackground, LibraryBook, OperationKind, OperationResult, PendingRequest,
-  ReadingQuestion, Region, SaveDetail, SaveSummary, SupplyOffer } from '../types/game'
+  ReadingQuestion, ReadingReward, Region, SaveDetail, SaveSummary, SupplyOffer } from '../types/game'
 
 export function readLocal<T>(key: string, fallback: T): T {
   try { const value = localStorage.getItem(key); return value ? JSON.parse(value) as T : fallback } catch { return fallback }
@@ -72,7 +73,8 @@ export const useGameStore = defineStore('game', () => {
 
   function restoreQuestion(id: string) {
     const saved = readLocal<ReadingQuestion | null>(key(id, 'question'), null)
-    question.value = saved?.turnNumber === detail.value?.save.totalTurnNumber ? saved : null
+    const book = detail.value?.books.find(book => book.bookCode === saved?.bookCode)
+    question.value = saved?.turnNumber === detail.value?.save.totalTurnNumber && book?.readable && book.playerReadingEnabled ? saved : null
     if (!question.value) writeLocal(key(id, 'question'), null)
   }
   async function syncDetail(epoch: number) {
@@ -108,12 +110,14 @@ export const useGameStore = defineStore('game', () => {
     const savedPending = readLocal<PendingRequest | null>(key(id, 'pending'), null)
     pending.value = savedPending?.saveId === id ? savedPending : null
     try {
-      // 复用已有幂等的内容补齐入口，为旧存档补管书人和旧模板身份，不重写记忆。
-      await request<void>('/save/' + segment(id) + '/content', 'POST')
+      // 内容补齐同时核算旧阅读收益；后续详情使用补齐后的真实属性。
+      const restored = await request<ReadingReward>('/save/' + segment(id) + '/content', 'POST')
       if (epoch !== readEpoch) return
       const fresh = await request<SaveDetail>('/save/' + segment(id))
       if (epoch !== readEpoch) return
       detail.value = fresh
+      const restoredText = formatReadingReward(restored)
+      if (restoredText) notice.value = '已补齐阅读成长：' + restoredText + '。'
       restoreQuestion(id)
       await syncDialogue(epoch)
     } catch (e) { if (epoch === readEpoch) { error.value = message(e); stale.value = true } }

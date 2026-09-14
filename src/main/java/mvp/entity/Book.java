@@ -19,6 +19,7 @@ public class Book {
     private String growthDomainCode; // 阅读收益所属领域，不作为人物身份限制
     private String readingRequirementJson; // 固定结构的阅读条件JSON
     private Boolean playerReadingEnabled = false; // 是否允许玩家以身入局读书，仅适用于科举类书籍
+    // 以下五项权重保留旧定义兼容；当前成长使用game/book.json中的readingReward。
     private Integer abilityShiziWeight; // 识字能力收益权重百分比
     private Integer abilityJingyiWeight; // 经义能力收益权重百分比
     private Integer abilityWenzhangWeight; // 文章能力收益权重百分比

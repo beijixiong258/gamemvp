@@ -5,10 +5,12 @@ import { useGameStore, readLocal, writeLocal } from '../stores/game'
 import { useDraft } from '../stores/draft'
 import { assets, portrait } from '../config/assets'
 import { allows, childrenOf, getLocation, locations, npcLocation, roleName } from '../config/locations'
+import { readingRewardEntries } from '../config/reading'
 import type { Character } from '../types/game'
 import ModalPanel from '../components/ModalPanel.vue'
 import CharacterStats from '../components/CharacterStats.vue'
 import BooksPanel from '../components/BooksPanel.vue'
+import BookCard from '../components/BookCard.vue'
 import ReadingPanel from '../components/ReadingPanel.vue'
 import DialoguePanel from '../components/DialoguePanel.vue'
 const game = useGameStore()
@@ -33,6 +35,11 @@ const availableNpcs = computed(() => {
 const sceneItems = computed(() => (game.detail?.sceneItems ?? []).filter(item => item.sceneCode === location.value.sceneCode))
 const supplies = computed(() => (game.detail?.supplies ?? []).filter(offer =>
   offer.equipment.equipmentType === 'CONSUMABLE' && offer.sceneCode === location.value.sceneCode))
+const backpackEntries = computed(() => {
+  const books = new Map(game.detail?.books.map(book => [book.bookCode, book]))
+  return (game.detail?.backpack ?? []).map(item => ({ item, book: books.get(item.equipment.equipmentCode) }))
+})
+const readingGains = computed(() => readingRewardEntries(game.outcome?.changes?.readingRewardGain))
 const milestones = computed(() => [...(game.detail?.milestones ?? [])].reverse())
 const freeRoom = ref('')
 const freeText = useDraft(() => 'mvp:free-draft:' + route.params.saveId + ':' + location.value.id)
@@ -103,7 +110,7 @@ async function submitFree() {
       <div v-if="game.sick" class="scene-notice warning"><strong>身体需要休养</strong><p>休养会继续至康复或下一个考试节点。</p><button class="primary" :disabled="!game.canWrite" @click="game.action('REST', 'SCENE_JIA_WOSHI')">继续休养</button></div>
       <div v-if="game.dialogue && !game.dialogue.ended" class="conversation-reminder"><button @click="panel = 'dialogue'">继续与{{ counterpart?.name || '对方' }}交谈 · {{ game.dialogue.version }}/5 轮 →</button></div>
       <div v-if="game.notice" class="scene-notice" role="status"><span class="eyebrow">刚刚发生</span><p class="prose">{{ game.notice }}</p>
-        <div v-if="game.outcome?.changes" class="change-tags"><span v-if="game.outcome.changes.progressGain">阅读 +{{ game.outcome.changes.progressGain }}</span><span>疲劳 {{ game.outcome.changes.fatigueChange > 0 ? '+' : '' }}{{ game.outcome.changes.fatigueChange }}</span><span>健康 {{ game.outcome.changes.healthChange > 0 ? '+' : '' }}{{ game.outcome.changes.healthChange }}</span></div>
+        <div v-if="game.outcome?.changes" class="change-tags"><span v-for="gain in readingGains" :key="gain.label">{{ gain.label }} +{{ gain.value }}</span><span v-if="game.outcome.changes.progressGain">阅读 +{{ game.outcome.changes.progressGain }}</span><span>疲劳 {{ game.outcome.changes.fatigueChange > 0 ? '+' : '' }}{{ game.outcome.changes.fatigueChange }}</span><span>健康 {{ game.outcome.changes.healthChange > 0 ? '+' : '' }}{{ game.outcome.changes.healthChange }}</span></div>
       </div>
     </section>
 
@@ -113,7 +120,10 @@ async function submitFree() {
       <button class="free-action-button" @click="openFree"><span class="round-icon">行</span><span>自定义行动</span></button>
     </footer>
 
-    <ModalPanel v-if="panel" :key="panel" :title="panelTitles[panel]" :wide="panel === 'books' || panel === 'reading'" @close="panel = null">
+    <ModalPanel v-if="panel" :key="panel" :title="panelTitles[panel]" :wide="panel === 'books' || panel === 'reading' || panel === 'backpack'" @close="panel = null">
+      <div v-if="(panel === 'books' || panel === 'backpack' || panel === 'reading') && readingGains.length" class="inline-note" role="status">
+        <strong>最近阅读成长</strong><div class="change-tags"><span v-for="gain in readingGains" :key="gain.label">{{ gain.label }} +{{ gain.value }}</span></div>
+      </div>
       <CharacterStats v-if="panel === 'stats'" />
       <BooksPanel v-else-if="panel === 'books'" :location="location" @go="go" @reading="panel = 'reading'" />
       <ReadingPanel v-else-if="panel === 'reading'" />
@@ -134,14 +144,18 @@ async function submitFree() {
       <template v-else-if="panel === 'backpack'">
         <div v-if="!game.detail.backpack.length" class="empty-state"><span class="empty-glyph">囊</span><p>行囊尚空。先到讲堂领取教材吧。</p><button @click="go('classroom')">前往讲堂 →</button></div>
         <p v-if="game.detail.backpack.some(item => item.useEffectCode !== 'NONE') && !location.sceneCode" class="inline-note">进入一个房间或书铺后，可以使用行囊中的物品。</p>
-        <div v-for="item in game.detail.backpack" :key="item.itemId" class="inventory-row">
-          <img v-if="item.equipment.equipmentType === 'BOOK'" :src="assets.book" alt="" loading="lazy" />
-          <span v-else class="item-glyph" aria-hidden="true">{{ item.useEffectCode === 'RELIEVE_FATIGUE' ? '茶' : '物' }}</span>
-          <div><h3>{{ item.equipment.equipmentName }} <small>×{{ item.quantity }}</small></h3><p>{{ item.equipment.description }}</p>
-            <span class="tag">{{ item.equipment.rarityName }}</span>
-            <div v-if="item.useEffectCode !== 'NONE'" class="button-row"><button :disabled="!canAct || !item.usable || !location.sceneCode" @click="game.useItem(item.itemId, location.sceneCode!)">使用一份</button><small v-if="item.useEffectCode === 'RELIEVE_FATIGUE' && game.player.characterPilao === 0" class="muted">此刻精神充足</small></div>
+        <template v-for="{ item, book } in backpackEntries" :key="item.itemId">
+          <BookCard v-if="book" :book="book" :location="location" @go="go" @reading="panel = 'reading'" />
+          <div v-else class="inventory-row">
+            <img v-if="item.equipment.equipmentType === 'BOOK'" :src="assets.book" alt="" loading="lazy" />
+            <span v-else class="item-glyph" aria-hidden="true">{{ item.useEffectCode === 'RELIEVE_FATIGUE' ? '茶' : '物' }}</span>
+            <div><h3>{{ item.equipment.equipmentName }} <small>×{{ item.quantity }}</small></h3><p>{{ item.equipment.description }}</p>
+              <span class="tag">{{ item.equipment.rarityName }}</span>
+              <p v-if="item.equipment.equipmentType === 'BOOK'" class="blocked-reason">阅读信息暂不可用，请刷新进度。</p>
+              <div v-if="item.useEffectCode !== 'NONE'" class="button-row"><button :disabled="!canAct || !item.usable || !location.sceneCode" @click="game.useItem(item.itemId, location.sceneCode!)">使用一份</button><small v-if="item.useEffectCode === 'RELIEVE_FATIGUE' && game.player.characterPilao === 0" class="muted">此刻精神充足</small></div>
+            </div>
           </div>
-        </div>
+        </template>
       </template>
       <template v-else-if="panel === 'items'">
         <p class="muted">这里实际留下的小物，拾取后可在行囊中查看。拾取不消耗回合。</p>
