@@ -2,6 +2,7 @@ package mvp.ai;
 
 import mvp.utils.ClasspathJsonLoader;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.StructuredOutputValidationAdvisor;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -53,6 +54,23 @@ public class GameClient {
         } catch (RuntimeException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "AI调用失败，请检查网络或模型账户余额后重试", exception);
+        }
+    }
+
+    /** 行动/记忆边界校验结构，单阶段最多一次格式修正，不重试语义拒绝。 */
+    public <T> T chatChecked(String promptCode, String userText, Class<T> type) {
+        Prompt prompt = new Prompt(new SystemMessage(getPrompt(promptCode)), new UserMessage(userText));
+        try {
+            var validator = StructuredOutputValidationAdvisor.builder()
+                    .outputType(type).maxRepeatAttempts(1).build();
+            T result = chatClient.prompt(prompt).advisors(validator).call().entity(type);
+            if (result == null) {
+                throw new IllegalStateException("模型未返回有效内容");
+            }
+            return result;
+        } catch (RuntimeException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "AI调用或输出格式校验失败，本次结果未采用，请稍后重试", exception);
         }
     }
 

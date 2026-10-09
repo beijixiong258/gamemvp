@@ -51,6 +51,7 @@ public class FamilyBackgroundServiceImpl extends ServiceImpl<FamilyBackgroundMap
         if (before.generated()) {
             return before.background();
         }
+        requireGenerationAvailable(before);
 
         // 只把不会随游戏推进变化的出生、家庭信息提供给模型，生成过程不持有存档锁。
         ChildhoodBackgroundOutput output = gameClient.chat("PROMPT_CHILDHOOD_BACKGROUND", before.facts().toString(),
@@ -66,16 +67,19 @@ public class FamilyBackgroundServiceImpl extends ServiceImpl<FamilyBackgroundMap
                 return current.background();
             }
             if (!Objects.equals(before.background().getId(), current.background().getId())
-                    || !before.facts().equals(current.facts())) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "初始家庭信息已变化，请重试生成童年背景");
+                    || !before.facts().equals(current.facts())
+                    || !before.save().equals(current.save()) || !before.player().equals(current.player())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "人物或回合状态已变化，请重试生成童年背景");
             }
+            requireGenerationAvailable(current);
             FamilyBackground background = current.background().setBackgroundSummary(narrative);
             if (!updateById(background)) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "家庭背景保存失败，请重试");
             }
             // 标记与正文在同一事务保存；事件只存索引，不复制叙事，也不作为新的人生节点。
-            eventRecordService.recordOperation(saveId, current.playerId(), requestId(saveId), payload(saveId),
-                    BACKGROUND_OPERATION, 0L, Map.of("familyBackgroundId", background.getId(), "generated", true));
+            eventRecordService.recordOperation(saveId, current.player().getId(), requestId(saveId), payload(saveId),
+                    BACKGROUND_OPERATION, current.save().getTotalTurnNumber(),
+                    Map.of("familyBackgroundId", background.getId(), "generated", true));
             return background;
         });
     }
@@ -100,7 +104,7 @@ public class FamilyBackgroundServiceImpl extends ServiceImpl<FamilyBackgroundMap
                     || background.getBackgroundSummary() == null || background.getBackgroundSummary().isBlank()) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "童年背景生成记录与家庭背景不一致");
             }
-            return new BackgroundSnapshot(background, player.getId(), null, true);
+            return new BackgroundSnapshot(background, gameSave, player, null, true);
         }
         Region birthRegion = regionService.getById(player.getBirthRegionId());
         if (birthRegion == null || gameSave.getBirthYear() == null || background.getInitialWealth() == null
@@ -121,7 +125,14 @@ public class FamilyBackgroundServiceImpl extends ServiceImpl<FamilyBackgroundMap
                         .set("initialFamilyWealth", background.getInitialWealth())
                         .set("initialFamilySummary", background.getBackgroundSummary()))
                 .set("parents", parents);
-        return new BackgroundSnapshot(background, player.getId(), facts, false);
+        return new BackgroundSnapshot(background, gameSave, player, facts, false);
+    }
+
+    private void requireGenerationAvailable(BackgroundSnapshot snapshot) {
+        if (!"STUDYING".equals(snapshot.save().getStatus()) || snapshot.player().getCharacterJiankang() <= 0
+                || snapshot.player().getSickTurnsRemaining() > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "请先完成考试或重病休养");
+        }
     }
 
     private String requestId(String saveId) {
@@ -132,7 +143,8 @@ public class FamilyBackgroundServiceImpl extends ServiceImpl<FamilyBackgroundMap
         return Map.of("operation", BACKGROUND_OPERATION, "saveId", saveId);
     }
 
-    private record BackgroundSnapshot(FamilyBackground background, String playerId, JSONObject facts, boolean generated) {
+    private record BackgroundSnapshot(FamilyBackground background, GameSave save, Character player,
+                                      JSONObject facts, boolean generated) {
     }
 
     public record ChildhoodBackgroundOutput(String backgroundSummary) {

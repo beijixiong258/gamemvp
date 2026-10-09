@@ -9,9 +9,11 @@ import ExamResult from '../components/ExamResult.vue'
 const game = useGameStore()
 const route = useRoute()
 const exam = computed(() => game.detail?.exams.find(e => e.id === route.params.examId && e.characterId === game.player?.id))
+const examCost = computed(() => game.detail?.actionRules.examStaminaCost ?? 0)
+const blockedReason = computed(() => game.staminaBlockedReason(examCost.value))
 const answer = useDraft(() => 'mvp:exam-answer:' + route.params.examId)
 const image = computed(() => exam.value?.examType === 'EXAM_XIANSHI' ? assets.exam : assets.classroom)
-async function submit() { if (exam.value && answer.value.trim()) await game.submitExam(exam.value.id, answer.value.trim()) }
+async function submit() { if (exam.value && answer.value.trim() && !blockedReason.value) await game.submitExam(exam.value.id, answer.value.trim()) }
 </script>
 <template>
   <main id="main-content" class="exam-page" :style="{ '--scene-image': 'url(' + image + ')' }">
@@ -20,11 +22,12 @@ async function submit() { if (exam.value && answer.value.trim()) await game.subm
       <header class="exam-heading"><span class="eyebrow">书卷检验所学</span><h1>{{ examName(exam.examType) }}</h1><p>{{ exam.status === 'READY' ? '静下心来，读一读这道题。' : '这一场考试，已经落笔。' }}</p></header>
       <section class="exam-question"><span class="eyebrow">题目</span><p class="question-text">{{ exam.questionText }}</p></section>
       <template v-if="exam.status === 'READY'">
+        <div class="inline-note"><p>入场休整已补满体力，并按入场时状态确定本场考试能力。</p><p>当前体力 {{ game.player?.stamina }} / {{ game.player?.maxStamina }}。整理思路不消耗体力；考试与考试（手动）交卷统一消耗 {{ examCost }} 点体力。</p><p v-if="blockedReason" class="blocked-reason">{{ blockedReason }}</p></div>
         <div class="thought-section"><h2>先理一理思路</h2><p v-if="exam.aiThoughtBubble" class="prose">{{ exam.aiThoughtBubble }}</p>
-          <template v-else><p class="muted">根据人物已有的能力和学识，整理可供参考的思路。</p><button :disabled="!game.canWrite" @click="game.thought(exam.id)">看看我的思路</button></template></div>
-        <form class="writing-form" @submit.prevent="submit"><h2>亲自作答</h2><label class="sr-only" for="exam-answer">考试答卷</label><textarea id="exam-answer" v-model="answer" rows="10" maxlength="8000" :disabled="!game.canWrite" placeholder="写下你的答案……"></textarea>
-          <div class="form-bottom"><small>{{ answer.length }} / 8000</small><button class="primary" :disabled="!game.canWrite || !answer.trim()">交卷</button></div></form>
-        <div class="auto-exam"><div><h3>也可以交给人物自行应考</h3><p class="muted">根据人物的学识与状态完成答卷，提交后使用实际考试结果。</p></div><button :disabled="!game.canWrite" @click="game.submitExam(exam.id)">系统代行 →</button></div>
+          <template v-else><p class="muted">根据人物已有的能力和学习经历，整理可供参考的思路。</p><button :disabled="!game.canWrite" @click="game.thought(exam.id)">看看我的思路</button></template></div>
+        <form class="writing-form" @submit.prevent="submit"><h2>考试（手动）</h2><p class="muted">以你的答卷为评分主要依据，答卷评分为 0～100 分，合格基准为 60 分；正式成绩按本场合格线换算，以结算结果为准。</p><label class="sr-only" for="exam-answer">考试（手动）答卷</label><textarea id="exam-answer" v-model="answer" rows="10" maxlength="8000" :disabled="!game.canWrite" placeholder="写下你的答案……"></textarea>
+          <div class="form-bottom"><small>{{ answer.length }} / 8000</small><button class="primary" :disabled="!game.canWrite || !!blockedReason || !answer.trim()">交卷</button></div></form>
+        <div class="auto-exam"><div><h3>考试</h3><p class="muted">根据人物的智力、书生能力与状态完成答卷，提交后使用实际考试结果。</p></div><button :disabled="!game.canWrite || !!blockedReason" @click="game.submitExam(exam.id)">考试 →</button></div>
       </template>
       <template v-else><ExamResult :exam="exam" /><div class="exam-continue"><RouterLink class="button primary large" :to="{name:'game',params:{saveId:route.params.saveId},query:{place:'classroom'}}">收好答卷，继续求学 →</RouterLink></div></template>
     </article>

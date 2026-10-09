@@ -17,7 +17,9 @@ const titles = computed(() => { try { return JSON.parse(game.player?.titlesJson 
   <template v-if="game.detail && game.player">
     <div class="stats-hero"><div><span>总学识</span><strong>{{ game.detail.knowledgeTotal }}</strong></div><div><span>钱包</span><strong>{{ game.player.wallet }}<small> 文</small></strong></div></div>
     <h3>身心</h3>
-    <dl class="stat-grid"><div><dt>健康</dt><dd>{{ game.player.characterJiankang }}</dd></div><div><dt>疲劳</dt><dd>{{ game.player.characterPilao }}</dd></div></dl>
+    <dl class="stat-grid"><div><dt>健康</dt><dd>{{ game.player.characterJiankang }}</dd></div><div><dt>体力</dt><dd>{{ game.player.stamina }} / {{ game.player.maxStamina }}</dd></div></dl>
+    <p v-if="game.overworked" class="blocked-reason">体力不高于 {{ game.detail.actionRules.overworkThreshold }} 点，已进入过劳状态。</p>
+    <p class="fine-print">健康达到 50 点时不影响学习效率。休息最多恢复健康至 {{ game.detail.actionRules.restHealthCap }} 点，已有更高健康值保持不变。</p>
     <h3>通用属性</h3><dl class="stat-grid"><div v-for="[label, value] in attributes" :key="label"><dt>{{ label }}</dt><dd>{{ value }}</dd></div></dl>
     <h3>书生能力</h3><dl class="stat-grid"><div v-for="[label, value] in abilities" :key="label"><dt>{{ label }}</dt><dd>{{ value }}</dd></div></dl>
     <h3>身份</h3><p>{{ game.player.degree || '尚无功名' }} · {{ game.player.officialPosition || '尚未任职' }}</p>

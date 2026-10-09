@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import mvp.ai.FreeActionResolver;
+import mvp.ai.FreeActionWorkflow;
 import mvp.engine.CharacterEngine;
 import mvp.engine.GameRuleConstant;
 import mvp.entity.Character;
@@ -40,8 +41,7 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
     private final CharacterService characterService;
     private final EventRecordService eventRecordService;
     private final MemoryRecordService memoryRecordService;
-    private final FreeActionResolver resolver;
-    private final CharacterEngine characterEngine;
+    private final FreeActionWorkflow workflow;
     private final PlatformTransactionManager transactionManager;
 
     @Override
@@ -57,6 +57,9 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
             return previous;
         }
         GameSaveService.ActionContext context = gameSaveService.prepareAction(saveId, actorId, command.sceneCode());
+        if (lambdaQuery().eq(DialogueRecord::getSaveId, saveId).eq(DialogueRecord::getEnded, false).exists()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "请先结束或离开当前对话");
+        }
         JSONObject scene = JSONUtil.parseObj(context.contextSummary()).getJSONObject("scene");
         if (!scene.getJSONArray("availableActionCode").contains("NPC_DIALOGUE")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前场景不能发起对话");
@@ -81,7 +84,7 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
 
     @Override
     public JSONObject respond(String saveId, String dialogueId, DialogueCommand command) {
-        if (command == null || command.requestId() == null || command.requestId().length() > 100
+        if (command == null || command.requestId() == null || command.requestId().isBlank() || command.requestId().length() > 100
                 || (!command.endDialogue() && (command.text() == null || command.text().isBlank()))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请填写消息及不超过100字符的稳定请求编号");
         }
@@ -96,6 +99,12 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
         DialogueRecord before = loadDialogue(saveId, dialogueId);
         requireOpenVersion(before, command);
         GameSaveService.ActionContext observed = gameSaveService.prepareAction(saveId, before.getActorId(), before.getSceneCode());
+        if (observed.character().stamina() < GameRuleConstant.AI_OPERATION_STAMINA_COST) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "体力不足，无法支付本次AI操作；可免费离开对话");
+        }
+        if (!Objects.equals(before.getStartedTurnNumber(), observed.turnNumber())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "对话不能跨游戏回合继续，请离开本场对话");
+        }
         Character counterpart = characterService.getById(before.getCounterpartId());
         if (counterpart == null || !Objects.equals(saveId, counterpart.getSaveId())
                 || !characterService.isPresent(counterpart, before.getSceneCode(), observed.turnNumber())) {
@@ -104,7 +113,8 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
         // 私人对话只提供已经参与的对方身份，不能借结算让同场第三人获得谈话经历。
         JSONObject facts = JSONUtil.parseObj(observed.contextSummary()).set("npcs", List.of(counterpart));
         GameSaveService.ActionContext snapshot = new GameSaveService.ActionContext(observed.saveId(), observed.actorId(),
-                observed.turnNumber(), observed.sceneCode(), observed.character(), observed.scholar(), facts.toString());
+                observed.turnNumber(), observed.sceneCode(), observed.character(), observed.scholar(), facts.toString(),
+                observed.stateSnapshot());
         int dialogueRound = before.getVersion() + 1;
         String memories = memoryRecordService.recall(saveId, counterpart.getId(), before.getActorId(),
                 GameRuleConstant.MEMORY_CONTEXT_MAX_CHARACTERS);
@@ -113,17 +123,17 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
                 .set("history", JSONUtil.parseArray(before.getMessagesJson())).set("currentText", submittedText)
                 .set("manualEnd", command.endDialogue()).set("dialogueRound", dialogueRound)
                 .set("maxDialogueRounds", GameRuleConstant.MAX_DIALOGUE_ROUNDS).set("memoryContext", JSONUtil.parseArray(memories)).toString();
-        FreeActionResolver.DialogueResolution resolution = resolver.resolveDialogue(input);
+        FreeActionWorkflow.DialogueResult resolved = workflow.executeDialogue(input, snapshot.character(), snapshot.scholar());
+        FreeActionResolver.Resolution resolution = resolved.resolution();
         boolean end = command.endDialogue() || resolution.endDialogue();
-        if (resolution.reply() == null || resolution.reply().isBlank()
+        if (resolution.narrative() == null || resolution.narrative().isBlank()
                 || (end && resolution.driverPatch() == null)) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI返回内容不完整，请检查网络或账户余额后重试");
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI返回内容不完整，本轮未结算，请重试");
         }
         if (dialogueRound >= GameRuleConstant.MAX_DIALOGUE_ROUNDS && !end) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI未按要求结束本场对话，请重试");
         }
-        CharacterEngine.DriverResult settlement = end
-                ? characterEngine.applyDriver(snapshot.character(), snapshot.scholar(), resolution.driverPatch()) : null;
+        CharacterEngine.DriverResult settlement = resolved.settlement();
         // 手动结束只总结已经发出的历史，不执行历史交易、不创建对象，也不因总结而续期。
         List<AcquisitionIntent> acquisitions = command.endDialogue() || resolution.acquisitions() == null ? List.of()
                 : resolution.acquisitions();
@@ -147,25 +157,51 @@ public class DialogueRecordServiceImpl extends ServiceImpl<DialogueRecordMapper,
             DialogueRecord current = lambdaQuery().eq(DialogueRecord::getId, dialogueId).last("FOR UPDATE").one();
             requireOpenVersion(current, command);
             JSONObject applied = gameSaveService.settleAiAction(snapshot, command.requestId() + "/settlement",
-                    payload, settlement, acquisitions, npcChanges, sceneItemChanges, false, resolution.reply(), false);
+                    payload, settlement, acquisitions, npcChanges, sceneItemChanges, false, resolution.narrative(), false);
             JSONArray history = JSONUtil.parseArray(current.getMessagesJson());
             history.add(new JSONObject().set("speaker", "actor")
                     .set("speakerName", facts.getJSONObject("actor").getStr("name")).set("text", submittedText)
                     .set("manualEnd", command.endDialogue()));
             history.add(new JSONObject().set("speaker", "counterpart")
-                    .set("speakerName", counterpart.getName()).set("text", resolution.reply())
+                    .set("speakerName", counterpart.getName()).set("text", resolution.narrative())
                     .set("executedTrades", applied.getJSONArray("trades"))
                     .set("resolvedNpcs", applied.getJSONArray("resolvedNpcs"))
                     .set("sceneItems", applied.getJSONArray("sceneItems")));
             current.setMessagesJson(history.toString()).setVersion(current.getVersion() + 1).setEnded(end);
             updateById(current);
-            JSONObject result = new JSONObject().set("dialogue", current).set("reply", resolution.reply()).set("applied", applied);
+            JSONObject result = new JSONObject().set("dialogue", current).set("reply", resolution.narrative()).set("applied", applied);
             eventRecordService.recordOperation(saveId, current.getActorId(), command.requestId(), payload,
                     end ? "END_DIALOGUE" : "DIALOGUE_MESSAGE",
                     applied.getJSONObject("detail").getJSONObject("save").getLong("totalTurnNumber"),
                     result, List.of(current.getCounterpartId()));
             return result;
         });
+    }
+
+    @Override
+    @Transactional
+    public JSONObject abandon(String saveId, String dialogueId, AbandonDialogueCommand command) {
+        if (command == null || command.requestId() == null || command.requestId().isBlank()
+                || command.requestId().length() > 100 || command.expectedVersion() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请提供稳定请求编号和对话版本");
+        }
+        lockSave(saveId);
+        JSONObject payload = new JSONObject().set("operation", "ABANDON_DIALOGUE")
+                .set("dialogueId", dialogueId).set("command", command);
+        JSONObject previous = eventRecordService.replay(saveId, command.requestId(), payload);
+        if (previous != null) {
+            return previous;
+        }
+        DialogueRecord current = loadDialogue(saveId, dialogueId);
+        requireOpenVersion(current, new DialogueCommand(command.requestId(), null, command.expectedVersion(), true));
+        current.setEnded(true).setVersion(current.getVersion() + 1);
+        updateById(current);
+        JSONObject result = new JSONObject().set("dialogue", current)
+                .set("feedback", "已离开对话，未结算本场成长；已完成的交易保留。本次不消耗体力。");
+        GameSave save = gameSaveMapper.selectById(saveId);
+        eventRecordService.recordOperation(saveId, current.getActorId(), command.requestId(), payload,
+                "ABANDON_DIALOGUE", save.getTotalTurnNumber(), result, List.of(current.getCounterpartId()));
+        return result;
     }
 
     @Override

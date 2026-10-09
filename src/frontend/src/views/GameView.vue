@@ -18,7 +18,7 @@ const route = useRoute()
 const router = useRouter()
 type Panel = 'stats' | 'books' | 'npcs' | 'places' | 'free' | 'backpack' | 'chronicle' | 'dialogue' | 'reading' | 'items' | 'supplies'
 const panel = ref<Panel | null>(null)
-const panelTitles: Record<Panel, string> = { stats: '人物小传', books: '书目与阅读', npcs: '此间人物', places: '县中去处', free: '你想做些什么', backpack: '随身行囊', chronicle: '人生记事', dialogue: '一席话', reading: '以身入局 · 读书体会', items: '身边小物', supplies: '书铺杂物' }
+const panelTitles: Record<Panel, string> = { stats: '人物小传', books: '书目与阅读', npcs: '此间人物', places: '县中去处', free: '你想做些什么', backpack: '随身行囊', chronicle: '人生记事', dialogue: '一席话', reading: '阅读（手动）', items: '身边小物', supplies: '书铺杂物' }
 const location = computed(() => getLocation(typeof route.query.place === 'string' ? route.query.place : readLocal('mvp:' + route.params.saveId + ':place', 'home')))
 const children = computed(() => childrenOf(location.value.id))
 const parent = computed(() => locations.find(l => l.id === location.value.parentId))
@@ -40,6 +40,17 @@ const backpackEntries = computed(() => {
   return (game.detail?.backpack ?? []).map(item => ({ item, book: books.get(item.equipment.equipmentCode) }))
 })
 const readingGains = computed(() => readingRewardEntries(game.outcome?.changes?.readingRewardGain))
+const practiceReason = computed(() => game.mainActionBlockedReason(game.detail?.actionRules.practiceStaminaCost ?? 0))
+const restReason = computed(() => game.mainActionBlockedReason(0))
+const aiReason = computed(() => game.staminaBlockedReason(game.aiStaminaCost))
+const activeDialogue = computed(() => !!game.dialogue && !game.dialogue.ended)
+const endTurnReason = computed(() => activeDialogue.value ? '请先结束或离开当前对话。' : '')
+const staminaChangeText = computed(() => {
+  const change = game.outcome?.changes?.fatigueChange
+  if (change === undefined) return ''
+  return change > 0 ? '疲劳消耗 ' + change + ' 点体力'
+    : change < 0 ? '恢复 ' + -change + ' 点体力' : '体力无变化'
+})
 const milestones = computed(() => [...(game.detail?.milestones ?? [])].reverse())
 const freeRoom = ref('')
 const freeText = useDraft(() => 'mvp:free-draft:' + route.params.saveId + ':' + location.value.id)
@@ -82,7 +93,7 @@ async function submitFree() {
       <button class="avatar-button" @click="panel = 'stats'"><img :src="assets.avatar" alt="打开人物详情" /></button>
       <div class="player-heading"><span class="eyebrow">求学岁月</span><button class="name-button" @click="panel = 'stats'">{{ game.player.name }}<small>{{ game.detail.save.age }} 岁</small></button><p>{{ county }} · {{ game.player.degree || '尚无功名' }}</p></div>
       <div class="hud-meters"><div><span>健康</span><meter min="0" max="100" :value="game.player.characterJiankang" aria-label="健康"></meter><b>{{ game.player.characterJiankang }}</b></div>
-        <div><span>疲劳</span><meter min="0" max="100" :value="game.player.characterPilao" aria-label="疲劳"></meter><b>{{ game.player.characterPilao }}</b></div></div>
+        <div><span>体力</span><meter min="0" :max="game.player.maxStamina" :value="game.player.stamina" aria-label="体力"></meter><b>{{ game.player.stamina }} / {{ game.player.maxStamina }}</b></div></div>
       <div class="hud-wallet"><span>钱囊 <b>{{ game.player.wallet }} 文</b></span><span>学识 <b>{{ game.detail.knowledgeTotal }}</b></span></div>
     </section>
 
@@ -97,20 +108,35 @@ async function submitFree() {
     </nav>
 
     <section class="scene-content">
+      <div class="turn-control paper">
+        <div><strong>{{ game.detail.save.currentYear }} 年 {{ game.detail.save.currentMonth }} 月 · 第 {{ game.detail.save.turnInMonth }} 回合</strong>
+          <p>主要行动额度：{{ game.majorActionUsed ? '已用' : '未用' }} · 每回合一次</p>
+          <small>阅读、提交阅读回答、练习文章和休息共享额度。结束回合推进时间，不恢复体力，可以直接空过。</small>
+          <small>求学以阅读和练习文章为主；完成教材后仍可练习文章，提高考试把握。人物互动提供额外成长。</small>
+          <small v-if="game.question">本回合阅读题目尚未提交，结束回合后失效。</small>
+          <small v-if="endTurnReason" class="blocked-reason">{{ endTurnReason }}</small>
+        </div>
+        <button class="primary" :disabled="!game.canWrite || game.detail.save.status !== 'STUDYING' || !!endTurnReason" @click="game.endTurn()">结束回合 →</button>
+      </div>
+      <div v-if="game.overworked" class="scene-notice warning"><strong>已进入过劳状态</strong><p>当前体力不高于 {{ game.detail.actionRules.overworkThreshold }} 点，可用休息恢复体力。</p></div>
       <div class="scene-title"><span class="eyebrow light">{{ location.id === 'home' ? '灯火可亲' : '读书与日常' }}</span><h2>{{ placeName }}</h2><p>{{ location.description }}</p></div>
       <div class="scene-actions">
         <button v-if="location.id === 'home'" class="button-ivory" @click="panel = 'chronicle'">回看童年</button>
         <button v-if="allows(location, 'READ_BOOK') || location.id === 'bookshop'" class="button-ivory" @click="panel = 'books'">{{ location.id === 'bookshop' ? '看看书铺' : '打开书目' }}</button>
-        <button v-if="allows(location, 'PRACTICE_WRITING')" class="button-ivory" :disabled="!canAct" @click="game.action('PRACTICE_WRITING', location.sceneCode!)">练习文章 · 一回合</button>
-        <button v-if="allows(location, 'REST')" class="button-ivory" :disabled="!canAct" @click="game.action('REST', location.sceneCode!)">休息 · 一回合</button>
+        <button v-if="allows(location, 'PRACTICE_WRITING')" class="button-ivory" :disabled="!game.canWrite || !!practiceReason" :title="practiceReason" @click="game.action('PRACTICE_WRITING', location.sceneCode!)">练习文章 · {{ game.detail.actionRules.practiceStaminaCost }} 体力</button>
+        <button v-if="allows(location, 'REST')" class="button-ivory" :disabled="!game.canWrite || !!restReason" :title="restReason" @click="game.action('REST', location.sceneCode!)">休息 · 恢复 {{ game.detail.actionRules.restStaminaRecovery }} 体力</button>
         <button v-if="location.sceneCode" class="button-ivory" @click="panel = 'items'">身边小物<span v-if="sceneItems.length"> · {{ sceneItems.length }}</span></button>
         <button v-if="location.id === 'bookshop'" class="button-ivory" @click="panel = 'supplies'">看看杂物</button>
-        <button v-if="game.question" class="button-ivory" @click="panel = 'reading'">继续写体会</button>
+        <button v-if="game.question" class="button-ivory" @click="panel = 'reading'">继续阅读（手动）</button>
       </div>
-      <div v-if="game.sick" class="scene-notice warning"><strong>身体需要休养</strong><p>休养会继续至康复或下一个考试节点。</p><button class="primary" :disabled="!game.canWrite" @click="game.action('REST', 'SCENE_JIA_WOSHI')">继续休养</button></div>
+      <div v-if="allows(location, 'PRACTICE_WRITING') || allows(location, 'REST')" class="scene-notice action-hint">
+        <p v-if="allows(location, 'PRACTICE_WRITING')">练习文章：疲劳消耗 {{ game.detail.actionRules.practiceStaminaCost }} 点体力。{{ practiceReason }}</p>
+        <p v-if="allows(location, 'REST')">休息：最多恢复 {{ game.detail.actionRules.restStaminaRecovery }} 点体力和 {{ game.detail.actionRules.restHealthRecovery }} 点健康；体力不超过上限，健康只恢复至 {{ game.detail.actionRules.restHealthCap }} 点，已有更高健康值保持不变。{{ restReason }}</p>
+      </div>
+      <div v-if="game.sick" class="scene-notice warning"><strong>身体需要休养</strong><p>结束回合后进入强制休养，遇考试节点暂时停下，阶段考试后继续剩余休养。{{ endTurnReason }}</p><button class="primary" :disabled="!game.canWrite || !!endTurnReason" @click="game.endTurn()">结束回合，继续休养</button></div>
       <div v-if="game.dialogue && !game.dialogue.ended" class="conversation-reminder"><button @click="panel = 'dialogue'">继续与{{ counterpart?.name || '对方' }}交谈 · {{ game.dialogue.version }}/5 轮 →</button></div>
       <div v-if="game.notice" class="scene-notice" role="status"><span class="eyebrow">刚刚发生</span><p class="prose">{{ game.notice }}</p>
-        <div v-if="game.outcome?.changes" class="change-tags"><span v-for="gain in readingGains" :key="gain.label">{{ gain.label }} +{{ gain.value }}</span><span v-if="game.outcome.changes.progressGain">阅读 +{{ game.outcome.changes.progressGain }}</span><span>疲劳 {{ game.outcome.changes.fatigueChange > 0 ? '+' : '' }}{{ game.outcome.changes.fatigueChange }}</span><span>健康 {{ game.outcome.changes.healthChange > 0 ? '+' : '' }}{{ game.outcome.changes.healthChange }}</span></div>
+        <div v-if="game.outcome?.changes" class="change-tags"><span v-for="gain in readingGains" :key="gain.label">{{ gain.label }} +{{ gain.value }}</span><span v-if="game.outcome.changes.progressGain">阅读 +{{ game.outcome.changes.progressGain }}</span><span v-if="staminaChangeText">{{ staminaChangeText }}</span><span>健康 {{ game.outcome.changes.healthChange > 0 ? '+' : '' }}{{ game.outcome.changes.healthChange }}</span></div>
       </div>
     </section>
 
@@ -139,7 +165,8 @@ async function submitFree() {
       <form v-else-if="panel === 'free'" class="writing-form" @submit.prevent="submitFree">
         <label class="field">行动发生在哪里<select v-model="freeRoom" :disabled="!canAct" required><option disabled value="">请选择具体房间或书铺</option><option v-for="place in freeLocations" :key="place.id" :value="place.id">{{ locations.find(l => l.id === place.parentId)?.label }} · {{ place.label }}</option></select></label>
         <label class="field">你想做些什么<textarea v-model="freeText" rows="7" maxlength="8000" :disabled="!canAct" placeholder="用自己的话描述一件想做的事……" required></textarea></label>
-        <div class="form-bottom"><small>{{ freeText.length }} / 8000 · 完成后消耗一回合</small><button class="primary" :disabled="!canAct || !freeRoom || !freeText.trim()">付诸行动 →</button></div>
+        <div class="form-bottom"><small>{{ freeText.length }} / 8000 · 疲劳消耗 {{ game.aiStaminaCost }} 点体力，不占主要行动额度</small><button class="primary" :disabled="!canAct || !!aiReason || !freeRoom || !freeText.trim()">付诸行动 →</button></div>
+        <p v-if="aiReason" class="blocked-reason">{{ aiReason }}</p>
       </form>
       <template v-else-if="panel === 'backpack'">
         <div v-if="!game.detail.backpack.length" class="empty-state"><span class="empty-glyph">囊</span><p>行囊尚空。先到讲堂领取教材吧。</p><button @click="go('classroom')">前往讲堂 →</button></div>
@@ -152,7 +179,7 @@ async function submitFree() {
             <div><h3>{{ item.equipment.equipmentName }} <small>×{{ item.quantity }}</small></h3><p>{{ item.equipment.description }}</p>
               <span class="tag">{{ item.equipment.rarityName }}</span>
               <p v-if="item.equipment.equipmentType === 'BOOK'" class="blocked-reason">阅读信息暂不可用，请刷新进度。</p>
-              <div v-if="item.useEffectCode !== 'NONE'" class="button-row"><button :disabled="!canAct || !item.usable || !location.sceneCode" @click="game.useItem(item.itemId, location.sceneCode!)">使用一份</button><small v-if="item.useEffectCode === 'RELIEVE_FATIGUE' && game.player.characterPilao === 0" class="muted">此刻精神充足</small></div>
+              <div v-if="item.useEffectCode !== 'NONE'" class="button-row"><button :disabled="!canAct || !item.usable || !location.sceneCode" @click="game.useItem(item.itemId, location.sceneCode!)">使用一份</button><small v-if="item.useEffectCode === 'RELIEVE_FATIGUE' && game.player.stamina >= game.player.maxStamina" class="muted">此刻体力充足</small></div>
             </div>
           </div>
         </template>
@@ -165,7 +192,7 @@ async function submitFree() {
         </div></div>
       </template>
       <template v-else-if="panel === 'supplies'">
-        <p class="muted">陆掌柜备下的日常用品，按标价购买。购买和使用均不消耗回合。</p>
+        <p class="muted">陆掌柜备下的日常用品，按标价购买。购买和使用均不消耗回合，体力恢复类物品每次最多恢复 {{ game.detail.actionRules.consumableStaminaRecoveryLimit }} 点体力，具体效果以物品说明为准。</p>
         <div v-if="!supplies.length" class="empty-state"><p>暂无在售杂物。</p></div>
         <div v-for="offer in supplies" :key="offer.equipment.id" class="inventory-row"><span class="item-glyph" aria-hidden="true">茶</span><div>
           <h3>{{ offer.equipment.equipmentName }}</h3><p>{{ offer.equipment.description }}</p>
@@ -175,8 +202,8 @@ async function submitFree() {
       </template>
       <template v-else-if="panel === 'chronicle'">
         <span class="eyebrow">六岁以前</span><p class="prose">{{ game.detail.familyBackground.backgroundSummary }}</p>
-        <button :disabled="!game.canWrite" @click="game.background()">回想童年往事</button>
-        <p class="fine-print">已经写下的童年往事会直接复用。</p>
+        <button :disabled="!game.canWrite" @click="game.background()">{{ game.detail.backgroundGenerated ? '重读童年往事' : '回想童年往事' }}</button>
+        <p class="fine-print">回想童年往事不消耗体力；已经写下的往事直接复用。</p>
         <h3 class="timeline-title">一路走来</h3><ol class="timeline"><li v-for="event in milestones" :key="event.id"><small>第 {{ event.occurredTurnNumber }} 回合</small><p>{{ event.eventSummary }}</p></li></ol><p v-if="!milestones.length" class="muted">往后的故事，还等着你来写。</p>
       </template>
     </ModalPanel>

@@ -187,7 +187,7 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
         );
         NarrativeOutput narrative = generateNarrative(exam, characterContext, AUTO, null, null, result);
         return new ExamResolution(AUTO, null, result,
-                requireAiText(narrative.answerText(), 8000, "系统代行答卷"),
+                requireAiText(narrative.answerText(), 8000, "考试答卷"),
                 requireAiText(narrative.summary(), 4000, "考试总结"));
     }
 
@@ -203,12 +203,15 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
         JSONObject input = examContext(exam, characterContext).set("playerInput", playerInput);
         EvaluationOutput evaluation = gameClient.chat(definitionFor(exam.getExamType()).evaluationPromptCode(),
                 input.toString(), EvaluationOutput.class);
-        if (evaluation.contentModifier() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI未返回答案内容修正，请重新提交");
+        if (evaluation == null || evaluation.answerScore() == null || evaluation.answerScore().signum() < 0
+                || evaluation.answerScore().compareTo(BigDecimal.valueOf(100)) > 0
+                || evaluation.answerScore().stripTrailingZeros().scale() > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI未返回有效的0至100整数答卷评分，请重新提交");
         }
-        String comment = requireAiText(evaluation.evaluation(), 4000, "答案评价");
+        String comment = "答卷评分：" + evaluation.answerScore().intValueExact() + "/100。\n"
+                + requireAiText(evaluation.evaluation(), 3800, "答案评价");
         ExamEngine.ExamResult result = examEngine.settlePlayer(
-                exam.getBaseAbilityScore(), exam.getStateOffset(), evaluation.contentModifier(),
+                exam.getBaseAbilityScore(), exam.getStateOffset(), evaluation.answerScore(),
                 exam.getDiceRoll(), exam.getLuckOffset(), exam.getPassThreshold()
         );
         NarrativeOutput narrative = generateNarrative(exam, characterContext, PLAYER, playerInput, comment, result);
@@ -334,7 +337,7 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
     public record ThoughtOutput(String thought) {
     }
 
-    public record EvaluationOutput(BigDecimal contentModifier, String evaluation) {
+    public record EvaluationOutput(BigDecimal answerScore, String evaluation) {
     }
 
     public record NarrativeOutput(String answerText, String summary) {

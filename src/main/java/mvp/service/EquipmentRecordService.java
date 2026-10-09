@@ -37,7 +37,7 @@ public interface EquipmentRecordService extends IService<EquipmentRecord> {
     /** 同一实例拾取后成为长期持有物品，原ID不变。 */
     JSONObject pickup(String saveId, String actorId, ItemCommand command);
 
-    /** 每次使用一份固定用途消耗品；动态线索不接受模型给出的数值效果。 */
+    /** 每次使用一份固定用途消耗品，恢复体力不超过统一单次上限；动态线索不接受模型数值效果。 */
     JSONObject use(String saveId, String actorId, ItemCommand command);
 
     record AcquisitionCommand(String requestId, String sceneCode, String supplierNpcCode,
@@ -51,7 +51,26 @@ public interface EquipmentRecordService extends IService<EquipmentRecord> {
     }
 
     record SceneItemChange(String itemId, String itemName, String description,
-                           String retentionLevel, Integer retentionTurns) implements Serializable {
+                           String retentionLevel, Integer retentionTurns, String templateCode) implements Serializable {
+    }
+
+    /** 自由生成只允许无经济价值的小物；内容、价值与功能不能由名称扩写。 */
+    enum ScenePropTemplate {
+        PAPER_SCRAP("普通纸片", "一张空白的普通纸片，可以留作纪念。"),
+        PEBBLE("普通小石子", "一颗随处可见的小石子，可以留作纪念。"),
+        FALLEN_LEAF("普通落叶", "一片干枯的普通落叶，可以夹在书页里留作纪念。"),
+        WOOD_CHIP("普通木片", "一片小小的普通木片，可以留作纪念。");
+
+        private final String itemName;
+        private final String description;
+
+        ScenePropTemplate(String itemName, String description) {
+            this.itemName = itemName;
+            this.description = description;
+        }
+
+        public String itemName() { return itemName; }
+        public String description() { return description; }
     }
 
     record SceneItem(String id, String itemCode, String itemName, String description, String sceneCode,

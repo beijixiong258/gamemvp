@@ -1,12 +1,14 @@
 package mvp.ai;
 
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONUtil;
+import mvp.engine.CharacterEngine;
 import mvp.engine.CharacterEngine.CharacterState;
 import mvp.engine.CharacterEngine.DriverResult;
 import mvp.engine.CharacterEngine.ScholarState;
-import mvp.engine.CharacterEngine;
+import mvp.service.CharacterService.NpcIntent;
 import mvp.service.EquipmentRecordService.AcquisitionIntent;
 import mvp.service.EquipmentRecordService.SceneItemChange;
-import mvp.service.CharacterService.NpcIntent;
 import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
@@ -22,12 +24,9 @@ import static org.bsc.langgraph4j.StateGraph.END;
 import static org.bsc.langgraph4j.StateGraph.START;
 import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
+/** 自由行动与私人对话共用固定流程；全部模型调用及数值预计算均在业务提交事务外。 */
 @Component
 public class FreeActionWorkflow {
-
-    private static final String RESOLVE_ACTION = "resolve_action";
-    private static final String SETTLE_DRIVER = "settle_driver";
-
     private final FreeActionResolver resolver;
     private final CharacterEngine characterEngine;
     private final CompiledGraph<FreeActionState> graph;
@@ -38,103 +37,77 @@ public class FreeActionWorkflow {
         this.graph = buildGraph();
     }
 
-    /**
-     * 执行一次自由行动智能体流程。
-     *
-     * @param command 玩家原文、完整事实JSON及引擎使用的行动前数值快照
-     * @return AI事件语义与Java引擎确定的结算结果
-     */
     public FreeActionResult execute(FreeActionCommand command) {
-        Map<String, Object> input = new HashMap<>();
-        input.put(FreeActionState.PLAYER_TEXT, command.playerText());
-        input.put(
-                FreeActionState.CONTEXT_SUMMARY,
-                command.contextSummary() == null ? "" : command.contextSummary()
-        );
-        input.put(FreeActionState.CHARACTER, command.character());
-        input.put(FreeActionState.SCHOLAR, command.scholar());
-
-        FreeActionState finalState;
-        try {
-            finalState = graph.invoke(input)
-                    .orElseThrow(() -> new IllegalStateException("自由行动流程没有返回最终状态"));
-        } catch (RuntimeException exception) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                    "AI调用失败，请检查网络或模型账户余额后重试", exception);
-        }
-        FreeActionResolver.FreeActionResolution resolution = finalState.resolution();
-        return new FreeActionResult(
-                finalState.settlement(),
-                resolution.eventSummary(),
-                resolution.lifeMilestone(),
-                resolution.acquisitions() == null ? List.of() : resolution.acquisitions(),
-                resolution.npcChanges() == null ? List.of() : resolution.npcChanges(),
-                resolution.sceneItemChanges() == null ? List.of() : resolution.sceneItemChanges()
-        );
+        JSONObject input = new JSONObject().set("currentText", command.playerText())
+                .set("facts", JSONUtil.parseObj(command.contextSummary()));
+        FreeActionState state = invoke(input, false, command.character(), command.scholar());
+        FreeActionResolver.Resolution result = state.resolution();
+        return new FreeActionResult(state.settlement(), result.narrative(), result.lifeMilestone(),
+                result.acquisitions(), result.npcChanges(), result.sceneItemChanges());
     }
 
-    /**
-     * 创建并编译自由行动图，固定执行Resolver解析和Java引擎结算两个节点。
-     *
-     * @return 可重复调用的自由行动编排图
-     */
+    public DialogueResult executeDialogue(String input, CharacterState character, ScholarState scholar) {
+        FreeActionState state = invoke(JSONUtil.parseObj(input), true, character, scholar);
+        return new DialogueResult(state.resolution(), state.settlement());
+    }
+
+    private FreeActionState invoke(JSONObject input, boolean dialogue, CharacterState character, ScholarState scholar) {
+        Map<String, Object> values = new HashMap<>();
+        values.put(FreeActionState.CONTEXT, ActionGuard.prepare(input, dialogue));
+        values.put(FreeActionState.CHARACTER, character);
+        values.put(FreeActionState.SCHOLAR, scholar);
+        try {
+            return graph.invoke(values).orElseThrow(() -> new IllegalStateException("智能体流程未返回结果"));
+        } catch (RuntimeException exception) {
+            // 图运行器可能包装节点异常，保留拒绝/冲突原因，不谎报为余额不足。
+            for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+                if (cause instanceof ResponseStatusException response) {
+                    throw response;
+                }
+            }
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI行动处理失败，本次未结算，请稍后重试", exception);
+        }
+    }
+
     private CompiledGraph<FreeActionState> buildGraph() {
         try {
-            return new StateGraph<>(FreeActionState::new)
-                    .addNode(RESOLVE_ACTION, node_async(this::resolveAction))
-                    .addNode(SETTLE_DRIVER, node_async(this::settleDriver))
-                    .addEdge(START, RESOLVE_ACTION)
-                    .addEdge(RESOLVE_ACTION, SETTLE_DRIVER)
-                    .addEdge(SETTLE_DRIVER, END)
-                    .compile();
+            return new StateGraph<FreeActionState>(FreeActionState::new)
+                    .addNode("interpret", node_async(state -> {
+                        var result = resolver.interpret(state.context());
+                        ActionGuard.validateInterpretation(state.context(), result);
+                        return Map.of(FreeActionState.INTERPRETATION, result);
+                    }))
+                    .addNode("resolve", node_async(state -> {
+                        var result = resolver.resolve(state.context(), state.interpretation());
+                        ActionGuard.validateResolution(state.context(), state.interpretation(), result);
+                        return Map.of(FreeActionState.RESOLUTION, result);
+                    }))
+                    .addNode("review", node_async(state -> {
+                        var review = resolver.review(state.context(), state.interpretation(), state.resolution());
+                        ActionGuard.requireApproved(review);
+                        return Map.of(FreeActionState.REVIEW, review);
+                    }))
+                    .addNode("settle_driver", node_async(state -> {
+                        ActionGuard.requireApproved(state.review());
+                        ActionGuard.validateResolution(state.context(), state.interpretation(), state.resolution());
+                        if ("DIALOGUE".equals(state.context().getStr("mode")) && !state.resolution().endDialogue()) {
+                            return Map.of();
+                        }
+                        return Map.of(FreeActionState.SETTLEMENT, characterEngine.applyDriver(
+                                state.character(), state.scholar(), state.resolution().driverPatch()));
+                    }))
+                    .addEdge(START, "interpret").addEdge("interpret", "resolve")
+                    .addEdge("resolve", "review").addEdge("review", "settle_driver")
+                    .addEdge("settle_driver", END).compile();
         } catch (GraphStateException exception) {
-            throw new IllegalStateException("自由行动流程图配置错误", exception);
+            throw new IllegalStateException("智能体流程图配置错误", exception);
         }
     }
 
-    /**
-     * 调用自由行动Resolver，把结构化输出写入图状态。
-     *
-     * @return 只包含Resolver输出的局部状态更新
-     */
-    private Map<String, Object> resolveAction(FreeActionState state) {
-        FreeActionResolver.FreeActionResolution resolution = resolver.resolve(
-                state.playerText(),
-                state.contextSummary()
-        );
-        return Map.of(FreeActionState.RESOLUTION, resolution);
-    }
-
-    /**
-     * 把Resolver驱动量交给人物引擎结算，并写入最终数值结果。
-     *
-     * @param state 已包含Resolver输出的图状态
-     * @return 只包含引擎结算结果的局部状态更新
-     */
-    private Map<String, Object> settleDriver(FreeActionState state) {
-        DriverResult settlement = characterEngine.applyDriver(
-                state.character(),
-                state.scholar(),
-                state.driverPatch()
-        );
-        return Map.of(FreeActionState.SETTLEMENT, settlement);
-    }
-
-    public record FreeActionCommand(
-            String playerText,
-            String contextSummary,
-            CharacterState character,
-            ScholarState scholar
-    ) {
-    }
-
-    public record FreeActionResult(
-            DriverResult settlement,
-            String eventSummary,
-            boolean lifeMilestone,
-            List<AcquisitionIntent> acquisitions,
-            List<NpcIntent> npcChanges,
-            List<SceneItemChange> sceneItemChanges
-    ) {
-    }
+    public record FreeActionCommand(String playerText, String contextSummary,
+                                    CharacterState character, ScholarState scholar) { }
+    public record FreeActionResult(DriverResult settlement, String eventSummary, boolean lifeMilestone,
+                                   List<AcquisitionIntent> acquisitions, List<NpcIntent> npcChanges,
+                                   List<SceneItemChange> sceneItemChanges) { }
+    public record DialogueResult(FreeActionResolver.Resolution resolution, DriverResult settlement) { }
 }

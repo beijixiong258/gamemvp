@@ -21,6 +21,9 @@ public interface DialogueRecordService extends IService<DialogueRecord> {
      */
     JSONObject respond(String saveId, String dialogueId, DialogueCommand command);
 
+    /** 无AI关闭对话，放弃尚未提交的成长；已经完成的交易不变。 */
+    JSONObject abandon(String saveId, String dialogueId, AbandonDialogueCommand command);
+
     /**
      * 读取对话历史与当前版本，不调用模型。
      *
@@ -32,5 +35,8 @@ public interface DialogueRecordService extends IService<DialogueRecord> {
     }
 
     record DialogueCommand(String requestId, String text, Integer expectedVersion, boolean endDialogue) {
+    }
+
+    record AbandonDialogueCommand(String requestId, Integer expectedVersion) {
     }
 }

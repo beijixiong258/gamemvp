@@ -83,7 +83,8 @@ public interface BookService extends IService<Book> {
             String supplierNpcCode,
             int totalKnowledge,
             BigDecimal acquiredKnowledge,
-            ReadingReward readingReward
+            ReadingReward readingReward,
+            int fatigueCost
     ) {
     }
 

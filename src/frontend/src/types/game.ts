@@ -12,6 +12,7 @@ export interface Character {
   retentionLevel: MemoryLevel; expiresAtTurn: number | null; currentSceneCode: string | null; archived: boolean
   characterZhili: number; characterDaode: number; characterZhengzhi: number; characterJiaoji: number
   characterTineng: number; characterJiankang: number; characterPilao: number
+  stamina: number; maxStamina: number; majorActionTurn: number | null
 }
 export interface Scholar {
   id: string; characterId: string; abilityShizi: number; abilityJingyi: number
@@ -26,7 +27,7 @@ export interface LibraryBook {
   bookCode: string; bookName: string; equipmentId: string; rarityCode: string; rarityName: string; rarityColor: string
   currentProgress: number; requiredProgress: number; totalReadTurnNumber: number; completed: boolean
   readable: boolean; playerReadingEnabled: boolean; blockedReasons: string[]; knowledgeSummary: string
-  ownedQuantity: number; price: number; supplierNpcCode: string; totalKnowledge: number; acquiredKnowledge: number; readingReward: ReadingReward
+  fatigueCost: number; ownedQuantity: number; price: number; supplierNpcCode: string; totalKnowledge: number; acquiredKnowledge: number; readingReward: ReadingReward
 }
 export interface Exam {
   id: string; saveId: string; characterId: string; examType: string; questionText: string
@@ -54,7 +55,12 @@ export interface SceneItem {
 export interface SupplyOffer {
   equipment: Equipment; sceneCode: string; ownedQuantity: number; canAcquire: boolean; blockedReasons: string[]
 }
+export interface ActionRules {
+  aiStaminaCost: number; examStaminaCost: number; practiceStaminaCost: number; restStaminaRecovery: number
+  restHealthRecovery: number; restHealthCap: number; consumableStaminaRecoveryLimit: number; overworkThreshold: number
+}
 export interface SaveDetail {
+  actionRules: ActionRules; backgroundGenerated: boolean; activeDialogue: Dialogue | null
   save: GameSave; character: Character; familyBackground: FamilyBackground; scholarProfile: Scholar
   books: LibraryBook[]; exams: Exam[]; milestones: Milestone[]; knowledgeTotal: number
   backpack: InventoryItem[]; npcs: Character[]; sceneItems: SceneItem[]; supplies: SupplyOffer[]
@@ -75,14 +81,14 @@ export interface ReadingQuestion {
 }
 export interface Scene { sceneCode: string; sceneName: string; description: string; availableActionCode: string[]; availableNpcCode: string[] }
 export interface OperationResult {
-  detail?: SaveDetail; dialogue?: Dialogue; reply?: string; summary?: string; feedback?: string
+  detail?: SaveDetail; dialogue?: Dialogue; reply?: string; summary?: string; narrative?: string; feedback?: string
   changes?: { progressGain: number; fatigueChange: number; healthChange: number; diceRoll: number | null
     abilityGain: Record<string, number>; readingRewardGain?: ReadingReward }
   applied?: { detail: SaveDetail; summary: string; trades: { equipmentName: string; quantity: number; cost: number }[] }
   exam?: Exam; score?: number; evaluation?: string; equipmentName?: string; quantity?: number; cost?: number
 }
 export type OperationKind = 'action' | 'free' | 'acquire' | 'dialogue-start' | 'dialogue-message'
-  | 'question' | 'answer' | 'thought' | 'exam' | 'background' | 'pickup' | 'use'
+  | 'question' | 'answer' | 'thought' | 'exam' | 'background' | 'pickup' | 'use' | 'end-turn' | 'dialogue-abandon'
 export interface PendingRequest {
   kind: OperationKind; saveId: string; path: string; label: string; body?: Record<string, unknown>
 }

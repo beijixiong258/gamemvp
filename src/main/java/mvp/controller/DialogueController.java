@@ -17,6 +17,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class DialogueController {
     private final DialogueRecordService dialogueRecordService;
 
+    @PostMapping("/{saveId}/{dialogueId}/abandon")
+    public JSONObject abandon(@PathVariable String saveId, @PathVariable String dialogueId,
+                              @RequestBody DialogueRecordService.AbandonDialogueCommand command) {
+        return dialogueRecordService.abandon(saveId, dialogueId, command);
+    }
+
     /** 开始对话：actorId为玩家或NPC，command指定对象、场景和请求编号。 */
     @PostMapping("/{saveId}/actor/{actorId}/start")
     public JSONObject start(@PathVariable String saveId, @PathVariable String actorId,

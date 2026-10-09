@@ -4,6 +4,8 @@ import cn.hutool.json.JSONObject;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
+import mvp.engine.CharacterEngine;
+import mvp.engine.GameRuleConstant;
 import mvp.entity.Character;
 import mvp.entity.Equipment;
 import mvp.entity.EquipmentRecord;
@@ -42,13 +44,13 @@ public class EquipmentRecordServiceImpl extends ServiceImpl<EquipmentRecordMappe
     private static final String CONSUMED = "CONSUMED";
     private static final String NO_EFFECT = "NONE";
     private static final String RELIEVE_FATIGUE = "RELIEVE_FATIGUE";
-    private static final int TEA_FATIGUE_RELIEF = 10;
 
     private final GameSaveMapper gameSaveMapper;
     private final CharacterService characterService;
     private final EquipmentService equipmentService;
     private final EventRecordService eventRecordService;
     private final ClasspathJsonLoader jsonLoader;
+    private final CharacterEngine characterEngine;
 
     @Override
     @Transactional
@@ -133,6 +135,7 @@ public class EquipmentRecordServiceImpl extends ServiceImpl<EquipmentRecordMappe
                 LinkedHashMap::new, Collectors.toList()));
         List<InventoryItem> result = new ArrayList<>();
         GameSave gameSave = requireSave(saveId, false);
+        Map<String, RestorationRule> restorationRules = loadRestorationRules();
         for (List<EquipmentRecord> group : groups.values()) {
             EquipmentRecord first = group.get(0);
             Equipment definition = first.getEquipmentId() == null ? dynamicDefinition(first)
@@ -141,8 +144,10 @@ public class EquipmentRecordServiceImpl extends ServiceImpl<EquipmentRecordMappe
                 throw new IllegalStateException("持有物品缺少对应公共定义：" + first.getId());
             }
             int quantity = group.stream().map(EquipmentRecord::getQuantity).reduce(0, Math::addExact);
-            String effect = effectCode(definition);
-            boolean usable = RELIEVE_FATIGUE.equals(effect) && actor.getCharacterPilao() > 0
+            RestorationRule restoration = restorationRule(definition, restorationRules);
+            String effect = restoration == null ? effectCode(definition) : RELIEVE_FATIGUE;
+            boolean usable = restoration != null && restoration.staminaRecovery() > 0
+                    && actor.getStamina() < actor.getMaxStamina()
                     && "STUDYING".equals(gameSave.getStatus()) && actor.getCharacterJiankang() > 0
                     && actor.getSickTurnsRemaining() == 0;
             result.add(new InventoryItem(definition, quantity, first.getId(), effect, usable));
@@ -262,11 +267,21 @@ public class EquipmentRecordServiceImpl extends ServiceImpl<EquipmentRecordMappe
                     result.add(sceneItem(item));
                     continue;
                 }
-                String name = boundedDescription(decision.itemName(), 64, "场景物品名称");
+                ScenePropTemplate template;
+                try {
+                    template = ScenePropTemplate.valueOf(decision.templateCode() == null ? "" : decision.templateCode());
+                } catch (IllegalArgumentException exception) {
+                    throw invalidSceneDecision("新增小物必须使用程序允许的普通物件模板");
+                }
+                if (!Objects.equals(decision.itemName(), template.itemName())
+                        || !Objects.equals(decision.description(), template.description())) {
+                    throw invalidSceneDecision("小物名称与说明必须符合模板，不能借描述创造财物或凭证");
+                }
+                String name = template.itemName();
                 if (equipmentService.lambdaQuery().eq(Equipment::getEquipmentName, name).count() > 0) {
                     throw invalidSceneDecision("公共目录中的书籍或消耗品必须通过正式获取，不能创建同名免费小物");
                 }
-                String description = boundedDescription(decision.description(), 600, "场景物品说明");
+                String description = template.description();
                 item = new EquipmentRecord().setId(id).setSaveId(saveId).setSceneCode(sceneCode)
                         .setItemName(name).setItemDescription(description).setQuantity(1)
                         .setAcquiredTurnNumber(occurredTurnNumber).setStatus(SCENE).setArchived(false);
@@ -368,26 +383,35 @@ public class EquipmentRecordServiceImpl extends ServiceImpl<EquipmentRecordMappe
         }
         Equipment definition = item.getEquipmentId() == null ? dynamicDefinition(item)
                 : equipmentService.getById(item.getEquipmentId());
-        if (definition == null || !"ITEM_QINGCHA".equals(definition.getEquipmentCode())
-                || !RELIEVE_FATIGUE.equals(effectCode(definition))) {
+        RestorationRule restoration = restorationRule(definition, loadRestorationRules());
+        if (restoration == null || restoration.staminaRecovery() <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "这件物品没有可直接使用的效果；书籍请通过读书使用");
         }
-        int fatigueBefore = actor.getCharacterPilao();
-        if (fatigueBefore <= 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "当前没有疲劳，无需消耗清茶");
+        int staminaBefore = actor.getStamina();
+        if (staminaBefore >= actor.getMaxStamina()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "当前体力充足，无需消耗物品");
         }
-        actor.setCharacterPilao(Math.max(0, fatigueBefore - TEA_FATIGUE_RELIEF));
+        int healthBefore = actor.getCharacterJiankang();
+        var recovered = characterEngine.recoverStamina(new CharacterEngine.CharacterState(
+                actor.getCharacterZhili(), actor.getCharacterDaode(), actor.getCharacterZhengzhi(),
+                actor.getCharacterJiaoji(), actor.getCharacterTineng(), actor.getCharacterJiankang(),
+                actor.getCharacterPilao()), restoration.staminaRecovery());
+        actor.setCharacterPilao(recovered.characterPilao())
+                .setCharacterJiankang(Math.max(0, healthBefore - restoration.healthCost()));
         characterService.updateById(actor);
         item.setQuantity(item.getQuantity() - 1).setRetentionLevel("L2").setExpiresAtTurn(null).setArchived(false);
         if (item.getQuantity() == 0) {
             item.setStatus(CONSUMED);
         }
         updateById(item);
-        int fatigueChange = actor.getCharacterPilao() - fatigueBefore;
+        int fatigueChange = staminaBefore - actor.getStamina();
+        int healthChange = actor.getCharacterJiankang() - healthBefore;
         JSONObject result = itemResult(command.requestId(), actor, item, definition, gameSave.getTotalTurnNumber())
                 .set("quantity", 1).set("remainingQuantity", item.getQuantity()).set("fatigueChange", fatigueChange)
-                .set("fatigueAfter", actor.getCharacterPilao()).set("cost", 0)
-                .set("summary", "饮用一份清茶，疲劳减少" + (-fatigueChange) + "。不消耗回合。");
+                .set("staminaAfter", actor.getStamina()).set("maxStamina", actor.getMaxStamina()).set("cost", 0)
+                .set("healthChange", healthChange).set("healthAfter", actor.getCharacterJiankang())
+                .set("summary", "使用一份“" + definition.getEquipmentName() + "”，恢复" + (-fatigueChange) + "点体力。"
+                        + (healthChange < 0 ? "消耗" + (-healthChange) + "点健康。" : "") + "不占用主要行动。");
         eventRecordService.recordOperation(saveId, actorId, command.requestId(), payload,
                 "USE_ITEM", gameSave.getTotalTurnNumber(), result);
         archiveExpired(saveId, gameSave.getTotalTurnNumber());
@@ -478,19 +502,36 @@ public class EquipmentRecordServiceImpl extends ServiceImpl<EquipmentRecordMappe
         return definition.getUseEffectCode() == null ? NO_EFFECT : definition.getUseEffectCode();
     }
 
+    /** 恢复效果只来自正式配置，单次体力恢复硬上限20，健康消耗限制在0至100。 */
+    private Map<String, RestorationRule> loadRestorationRules() {
+        Map<String, RestorationRule> rules = new LinkedHashMap<>();
+        for (JSONObject definition : jsonLoader.load("game/equipment.json", JSONObject.class)
+                .getJSONArray("equipment").toList(JSONObject.class)) {
+            JSONObject restoration = definition.getJSONObject("restoration");
+            if (restoration != null) {
+                int staminaRecovery = Math.max(0, Math.min(GameRuleConstant.CONSUMABLE_STAMINA_RECOVERY_LIMIT,
+                        restoration.getInt("staminaRecovery", 0)));
+                int healthCost = Math.max(0, Math.min(100, restoration.getInt("healthCost", 0)));
+                rules.put(definition.getStr("equipmentCode"), new RestorationRule(staminaRecovery, healthCost));
+            }
+        }
+        return rules;
+    }
+
+    private RestorationRule restorationRule(Equipment definition, Map<String, RestorationRule> rules) {
+        return definition != null && "CONSUMABLE".equals(definition.getEquipmentType())
+                ? rules.get(definition.getEquipmentCode()) : null;
+    }
+
+    private record RestorationRule(int staminaRecovery, int healthCost) {
+    }
+
     private int retentionTurns(Integer suggested) {
         return suggested != null && Set.of(3, 9, 18).contains(suggested) ? suggested : 9;
     }
 
     private int retentionRank(String level) {
         return "L2".equals(level) ? 2 : "L1".equals(level) ? 1 : 0;
-    }
-
-    private String boundedDescription(String value, int maxLength, String label) {
-        if (value == null || value.isBlank() || value.codePointCount(0, value.length()) > maxLength) {
-            throw invalidSceneDecision(label + "缺失或超过" + maxLength + "字符");
-        }
-        return value.strip();
     }
 
     private ResponseStatusException invalidSceneDecision(String message) {

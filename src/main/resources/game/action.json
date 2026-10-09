@@ -2,7 +2,7 @@
   "action": [
     {
       "actionCode": "READ_BOOK",
-      "actionName": "读书",
+      "actionName": "阅读",
       "actionType": "FIXED_ACTION",
       "availableSceneCode": [
         "SCENE_SISHU",
@@ -15,11 +15,11 @@
       ],
       "engineRuleCode": "RULE_READ_BOOK",
       "feedbackTextCode": "TEXT_READ_BOOK_RESULT",
-      "endTurn": true
+      "endTurn": false
     },
     {
       "actionCode": "READ_BOOK_PLAYER",
-      "actionName": "以身入局读书",
+      "actionName": "阅读（手动）",
       "actionType": "BOOK_PLAYER_ACTION",
       "availableSceneCode": [
         "SCENE_SISHU",
@@ -31,7 +31,7 @@
         "text"
       ],
       "engineRuleCode": "RULE_READ_BOOK_PLAYER",
-      "endTurn": true
+      "endTurn": false
     },
     {
       "actionCode": "PRACTICE_WRITING",
@@ -44,7 +44,7 @@
       "requiredParameter": [],
       "engineRuleCode": "RULE_PRACTICE_WRITING",
       "feedbackTextCode": "TEXT_PRACTICE_WRITING_RESULT",
-      "endTurn": true
+      "endTurn": false
     },
     {
       "actionCode": "REST",
@@ -57,11 +57,11 @@
       "requiredParameter": [],
       "engineRuleCode": "RULE_REST",
       "feedbackTextCode": "TEXT_REST_RESULT",
-      "endTurn": true
+      "endTurn": false
     },
     {
       "actionCode": "FREE_ACTION",
-      "actionName": "自由行动",
+      "actionName": "自定义行动",
       "actionType": "FREE_ACTION",
       "availableSceneCode": [
         "SCENE_JIA",
@@ -78,11 +78,11 @@
       ],
       "engineRuleCode": "RULE_DRIVER",
       "promptCode": "PROMPT_FREE_ACTION",
-      "endTurn": true
+      "endTurn": false
     },
     {
       "actionCode": "NPC_DIALOGUE",
-      "actionName": "NPC对话",
+      "actionName": "人物对话",
       "actionType": "NPC_DIALOGUE",
       "availableSceneCode": [
         "SCENE_JIA",
@@ -120,7 +120,7 @@
     },
     {
       "actionCode": "EXAM_AUTO",
-      "actionName": "系统代行",
+      "actionName": "考试",
       "actionType": "EXAM_ACTION",
       "availableSceneCode": [
         "SCENE_SISHU",
@@ -134,7 +134,7 @@
     },
     {
       "actionCode": "EXAM_PLAYER",
-      "actionName": "以身入局",
+      "actionName": "考试（手动）",
       "actionType": "EXAM_ACTION",
       "availableSceneCode": [
         "SCENE_SISHU",

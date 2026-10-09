@@ -10,22 +10,22 @@
         {
           "questionCode": "EXAM_MENGXUE_001",
           "questionText": "请说说近日所读篇目的大意，并写出其中最重要的一句话。",
-          "passThreshold": 35,
+          "passThreshold": 18,
           "generalAbilityWeight": {
-            "characterZhili": 0.20,
-            "characterDaode": 0.05,
+            "characterZhili": 0.10,
+            "characterDaode": 0.00,
             "characterZhengzhi": 0.00,
-            "characterJiaoji": 0.05,
-            "characterTineng": 0.05
+            "characterJiaoji": 0.00,
+            "characterTineng": 0.00
           },
           "careerAbilityWeight": {
-            "abilityShizi": 0.35,
+            "abilityShizi": 0.55,
             "abilityJingyi": 0.10,
-            "abilityWenzhang": 0.05,
-            "abilityCelun": 0.00,
-            "abilityWenxue": 0.05
+            "abilityWenzhang": 0.10,
+            "abilityCelun": 0.05,
+            "abilityWenxue": 0.10
           },
-          "knowledgeWeight": 0.10,
+          "knowledgeWeight": 0.00,
           "scoringPoint": ["准确复述篇目大意", "能写出关键语句", "表达清楚"],
           "thoughtPromptCode": "PROMPT_EXAM_THOUGHT",
           "evaluationPromptCode": "PROMPT_EXAM_EVALUATION",
@@ -43,22 +43,22 @@
         {
           "questionCode": "EXAM_JINGYI_001",
           "questionText": "请选择一段熟悉的经文，说明它教人如何立身。",
-          "passThreshold": 45,
+          "passThreshold": 29,
           "generalAbilityWeight": {
-            "characterZhili": 0.15,
-            "characterDaode": 0.08,
-            "characterZhengzhi": 0.02,
-            "characterJiaoji": 0.03,
-            "characterTineng": 0.02
+            "characterZhili": 0.10,
+            "characterDaode": 0.00,
+            "characterZhengzhi": 0.00,
+            "characterJiaoji": 0.00,
+            "characterTineng": 0.00
           },
           "careerAbilityWeight": {
-            "abilityShizi": 0.15,
-            "abilityJingyi": 0.25,
-            "abilityWenzhang": 0.10,
-            "abilityCelun": 0.05,
-            "abilityWenxue": 0.05
+            "abilityShizi": 0.20,
+            "abilityJingyi": 0.35,
+            "abilityWenzhang": 0.15,
+            "abilityCelun": 0.10,
+            "abilityWenxue": 0.10
           },
-          "knowledgeWeight": 0.10,
+          "knowledgeWeight": 0.00,
           "scoringPoint": ["经文理解准确", "能联系立身之道", "论述前后连贯"],
           "thoughtPromptCode": "PROMPT_EXAM_THOUGHT",
           "evaluationPromptCode": "PROMPT_EXAM_EVALUATION",
@@ -76,22 +76,22 @@
         {
           "questionCode": "EXAM_PRE_COUNTY_001",
           "questionText": "地方遇到歉收时，读书人应当如何自处，又能为乡里做些什么？",
-          "passThreshold": 52,
+          "passThreshold": 33,
           "generalAbilityWeight": {
-            "characterZhili": 0.15,
-            "characterDaode": 0.05,
-            "characterZhengzhi": 0.05,
-            "characterJiaoji": 0.02,
-            "characterTineng": 0.03
+            "characterZhili": 0.10,
+            "characterDaode": 0.00,
+            "characterZhengzhi": 0.00,
+            "characterJiaoji": 0.00,
+            "characterTineng": 0.00
           },
           "careerAbilityWeight": {
-            "abilityShizi": 0.10,
-            "abilityJingyi": 0.20,
-            "abilityWenzhang": 0.15,
-            "abilityCelun": 0.10,
-            "abilityWenxue": 0.05
+            "abilityShizi": 0.15,
+            "abilityJingyi": 0.25,
+            "abilityWenzhang": 0.20,
+            "abilityCelun": 0.20,
+            "abilityWenxue": 0.10
           },
-          "knowledgeWeight": 0.10,
+          "knowledgeWeight": 0.00,
           "scoringPoint": ["兼顾修身与乡里责任", "提出可行办法", "行文有条理"],
           "thoughtPromptCode": "PROMPT_EXAM_THOUGHT",
           "evaluationPromptCode": "PROMPT_EXAM_EVALUATION",
@@ -109,22 +109,22 @@
         {
           "questionCode": "EXAM_XIANSHI_001",
           "questionText": "人为何要读书？请结合所学，说明修身与处世的关系。",
-          "passThreshold": 60,
+          "passThreshold": 33,
           "generalAbilityWeight": {
-            "characterZhili": 0.18,
-            "characterDaode": 0.08,
-            "characterZhengzhi": 0.04,
+            "characterZhili": 0.10,
+            "characterDaode": 0.00,
+            "characterZhengzhi": 0.00,
             "characterJiaoji": 0.00,
-            "characterTineng": 0.05
+            "characterTineng": 0.00
           },
           "careerAbilityWeight": {
-            "abilityShizi": 0.08,
-            "abilityJingyi": 0.18,
-            "abilityWenzhang": 0.14,
-            "abilityCelun": 0.10,
-            "abilityWenxue": 0.05
+            "abilityShizi": 0.15,
+            "abilityJingyi": 0.30,
+            "abilityWenzhang": 0.20,
+            "abilityCelun": 0.15,
+            "abilityWenxue": 0.10
           },
-          "knowledgeWeight": 0.10,
+          "knowledgeWeight": 0.00,
           "scoringPoint": ["说明读书与修身的关系", "说明修身如何影响处世", "论述前后连贯"],
           "thoughtPromptCode": "PROMPT_EXAM_THOUGHT",
           "evaluationPromptCode": "PROMPT_EXAM_EVALUATION",

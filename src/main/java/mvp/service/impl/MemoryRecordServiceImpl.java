@@ -227,8 +227,10 @@ public class MemoryRecordServiceImpl extends ServiceImpl<MemoryRecordMapper, Mem
                 JSONObject document = readDocument(record);
                 RetentionDecision decision;
                 String summary;
+                List<String> evidenceIds;
                 if (document != null) {
                     summary = document.getStr("summary");
+                    evidenceIds = document.getJSONArray("evidenceIds") == null ? List.of() : document.getJSONArray("evidenceIds").toList(String.class);
                     decision = storedDecision(document, event, confirmedEvent);
                 } else {
                     String relatedId = involved.stream().map(Character::getId).filter(id -> !ownerId.equals(id))
@@ -245,6 +247,7 @@ public class MemoryRecordServiceImpl extends ServiceImpl<MemoryRecordMapper, Mem
                     }
                     summary = truncate(output.summary().strip(), MAX_SUMMARY_CHARACTERS);
                     decision = retentionDecision(output, event, confirmedEvent, previousIds);
+                    evidenceIds = output.evidenceIds();
                 }
                 if (newRecord) {
                     Long expiry = "L1".equals(decision.level())
@@ -255,7 +258,7 @@ public class MemoryRecordServiceImpl extends ServiceImpl<MemoryRecordMapper, Mem
                 }
                 // 正文先于索引提交；首次决策随正文保存，索引重试复用同一份决策。
                 if (document == null && !Boolean.TRUE.equals(record.getArchived())) {
-                    writeSummary(record, summary, decision);
+                    writeSummary(record, summary, decision, evidenceIds);
                 }
                 MemoryRecord index = record;
                 RetentionDecision retained = decision;
@@ -336,7 +339,7 @@ public class MemoryRecordServiceImpl extends ServiceImpl<MemoryRecordMapper, Mem
         JSONArray ids = stored.getJSONArray("reinforcedMemoryIds");
         List<String> reinforced = ids == null ? List.of() : ids.toList(String.class);
         return retentionDecision(new MemoryResolution(document.getStr("summary"), stored.getStr("level"),
-                stored.getStr("kind"), stored.getInt("retentionTurns"), stored.getStr("reason"), reinforced),
+                stored.getStr("kind"), stored.getInt("retentionTurns"), stored.getStr("reason"), reinforced, List.of()),
                 event, confirmedEvent, new LinkedHashSet<>(reinforced));
     }
 
@@ -408,7 +411,7 @@ public class MemoryRecordServiceImpl extends ServiceImpl<MemoryRecordMapper, Mem
                 String speaker = message.getStr("speaker");
                 if (("actor".equals(speaker) && !Boolean.TRUE.equals(message.getBool("manualEnd"))) || "counterpart".equals(speaker)) {
                     statements.add(new JSONObject().set("speakerId", dialogue.getStr("actor".equals(speaker) ? "actorId" : "counterpartId"))
-                            .set("text", truncate(message.getStr("text"), 1200)));
+                            .set("text", truncate(message.getStr("text"), 1200)).set("authority", "UTTERANCE_NOT_FACT"));
                 }
                 trades.addAll(confirmedTrades(message.getJSONArray("executedTrades")));
                 npcs.addAll(confirmedNpcs(message.getJSONArray("resolvedNpcs"), participantIds));
@@ -420,7 +423,7 @@ public class MemoryRecordServiceImpl extends ServiceImpl<MemoryRecordMapper, Mem
             boolean freeAction = "FREE_ACTION".equals(event.getEventCode());
             result.set("resolvedNpcs", confirmedNpcs(settlement.getJSONArray("resolvedNpcs"), participantIds))
                     .set("sceneItems", confirmedSceneItems(settlement.getJSONArray("sceneItems")));
-            result.set("eventSummary", truncate(freeAction ? settlement.getStr("summary") : event.getEventSummary(), 2000));
+            result.set("eventSummary", truncate(freeAction ? settlement.getStr("narrative", settlement.getStr("summary")) : event.getEventSummary(), 2000));
             result.set("summaryIsNarrative", freeAction || "FREE_ACTION_MILESTONE".equals(event.getEventCode()));
             result.set("confirmedResult", select(settlement, "bookCode", "currentProgress", "progressGain", "score", "diceRoll"));
             JSONObject command = freeAction ? JSONUtil.parseObj(event.getRequestPayloadJson()).getJSONObject("command") : null;
@@ -599,7 +602,8 @@ public class MemoryRecordServiceImpl extends ServiceImpl<MemoryRecordMapper, Mem
             }
             JSONObject item = new JSONObject().set("memoryId", record.getId()).set("sourceEventId", record.getSourceEventId())
                     .set("turnNumber", record.getOccurredTurnNumber()).set("sourceEventSequence", record.getSourceEventSequence()).set("level", record.getMemoryLevel())
-                    .set("kind", record.getMemoryKind()).set("summary", summary);
+                    .set("kind", record.getMemoryKind()).set("summary", summary)
+                    .set("summaryAuthority", "RECOLLECTION").set("sourceEvidence", recallEvidence(record));
             context.add(item);
             if (codePoints(context.toString()) <= budget) {
                 continue;
@@ -623,6 +627,40 @@ public class MemoryRecordServiceImpl extends ServiceImpl<MemoryRecordMapper, Mem
             break;
         }
         return context.toString();
+    }
+
+    /** 每次从真实来源事件重建证据，旧摘要或文件内的自称不能获得事实权威。 */
+    private JSONObject recallEvidence(MemoryRecord record) {
+        EventRecord event = eventRecordMapper.selectById(record.getSourceEventId());
+        if (event == null || !Objects.equals(event.getSaveId(), record.getSaveId())
+                || !Objects.equals(event.getEventSequence(), record.getSourceEventSequence())
+                || !Objects.equals(event.getOccurredTurnNumber(), record.getOccurredTurnNumber())) {
+            return new JSONObject().set("available", false);
+        }
+        List<Character> involved = participants(event);
+        if (involved.stream().noneMatch(person -> record.getOwnerCharacterId().equals(person.getId()))) {
+            return new JSONObject().set("available", false);
+        }
+        JSONObject basis = confirmedEvent(event, involved);
+        JSONObject result = new JSONObject().set("available", true).set("partial", true)
+                .set("occurredTurnNumber", event.getOccurredTurnNumber()).set("sourceEventSequence", event.getEventSequence());
+        // 摘录保持结构完整；缺少某条回执不等于它没发生，摘要也不能替代缺失的证据。
+        for (String field : List.of("statements", "executedTrades", "sceneItems", "resolvedNpcs")) {
+            JSONArray original = basis.getJSONArray(field);
+            JSONArray excerpt = new JSONArray();
+            for (int i = 0; original != null && i < Math.min(original.size(), 2); i++) {
+                JSONObject entry = JSONUtil.parseObj(original.getJSONObject(i).toString());
+                if (entry.containsKey("text")) {
+                    entry.set("text", truncate(entry.getStr("text"), 160)).set("partial", true);
+                }
+                excerpt.add(entry);
+            }
+            result.set(field, excerpt);
+        }
+        for (String field : List.of("confirmedResult", "exam")) {
+            if (basis.containsKey(field)) { result.set(field, basis.get(field)); }
+        }
+        return result;
     }
 
     private String readSummary(MemoryRecord record) {
@@ -652,7 +690,7 @@ public class MemoryRecordServiceImpl extends ServiceImpl<MemoryRecordMapper, Mem
         }
     }
 
-    private void writeSummary(MemoryRecord record, String summary, RetentionDecision decision) throws IOException {
+    private void writeSummary(MemoryRecord record, String summary, RetentionDecision decision, List<String> evidenceIds) throws IOException {
         Path file = memoryFile(record);
         Files.createDirectories(file.getParent());
         // 创建目录后再次解析真实路径，拒绝符号链接/目录联接把正文导向memory目录之外。
@@ -662,6 +700,7 @@ public class MemoryRecordServiceImpl extends ServiceImpl<MemoryRecordMapper, Mem
         JSONObject document = new JSONObject().set("version", 1).set("id", record.getId()).set("saveId", record.getSaveId())
                 .set("ownerCharacterId", record.getOwnerCharacterId()).set("sourceEventId", record.getSourceEventId())
                 .set("occurredTurnNumber", record.getOccurredTurnNumber()).set("sourceEventSequence", record.getSourceEventSequence()).set("summary", summary)
+                .set("summaryAuthority", "RECOLLECTION").set("evidenceIds", evidenceIds)
                 .set("retentionDecision", new JSONObject().set("level", decision.level()).set("kind", decision.kind())
                         .set("retentionTurns", decision.retentionTurns()).set("reason", decision.reason())
                         .set("reinforcedMemoryIds", decision.reinforcedMemoryIds()));

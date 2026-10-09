@@ -5,6 +5,7 @@ import cn.hutool.json.JSONObject;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
+import mvp.engine.GameRuleConstant;
 import mvp.entity.Equipment;
 import mvp.mapper.EquipmentMapper;
 import mvp.service.EquipmentService;
@@ -13,6 +14,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -37,7 +39,8 @@ public class EquipmentServiceImpl extends ServiceImpl<EquipmentMapper, Equipment
         List<Equipment> definitions = new ArrayList<>();
         Set<String> codes = new HashSet<>();
         for (int index = 0; index < configured.size(); index++) {
-            Equipment definition = configured.getJSONObject(index).toBean(Equipment.class);
+            JSONObject source = configured.getJSONObject(index);
+            Equipment definition = source.toBean(Equipment.class);
             String code = definition.getEquipmentCode();
             if (code == null || code.isBlank() || code.length() > 64 || !codes.add(code)) {
                 throw new IllegalStateException("固定物品编码缺失、过长或重复：" + code);
@@ -59,10 +62,18 @@ public class EquipmentServiceImpl extends ServiceImpl<EquipmentMapper, Equipment
                     || definition.getSupplierNpcCode() == null || definition.getSupplierNpcCode().isBlank()
                     || definition.getDescription() == null || definition.getDescription().isBlank()
                     || definition.getPrice() == null || definition.getPrice() < 0
-                    || ("BOOK".equals(definition.getEquipmentType()) && !"NONE".equals(definition.getUseEffectCode()))
-                    || ("RELIEVE_FATIGUE".equals(definition.getUseEffectCode())
-                        && !"ITEM_QINGCHA".equals(code))) {
+                    || ("BOOK".equals(definition.getEquipmentType()) && !"NONE".equals(definition.getUseEffectCode()))) {
                 throw new IllegalStateException("固定物品目录字段无效：" + code);
+            }
+            JSONObject restoration = source.getJSONObject("restoration");
+            if ("CONSUMABLE".equals(definition.getEquipmentType())) {
+                if (restoration == null
+                        || !validRestorationValue(restoration.get("staminaRecovery"), GameRuleConstant.CONSUMABLE_STAMINA_RECOVERY_LIMIT)
+                        || !validRestorationValue(restoration.get("healthCost"), 100)) {
+                    throw new IllegalStateException("消耗品须配置整数恢复量0至20及健康消耗0至100：" + code);
+                }
+            } else if (restoration != null) {
+                throw new IllegalStateException("只有消耗品可以配置恢复效果：" + code);
             }
             definitions.add(definition.setId(null));
         }
@@ -91,5 +102,14 @@ public class EquipmentServiceImpl extends ServiceImpl<EquipmentMapper, Equipment
             result.put(definition.getEquipmentCode(), definition);
         }
         return Map.copyOf(result);
+    }
+
+    private boolean validRestorationValue(Object value, int maximum) {
+        if (!(value instanceof Number)) {
+            return false;
+        }
+        BigDecimal number = new BigDecimal(value.toString());
+        return number.signum() >= 0 && number.compareTo(BigDecimal.valueOf(maximum)) <= 0
+                && number.stripTrailingZeros().scale() <= 0;
     }
 }

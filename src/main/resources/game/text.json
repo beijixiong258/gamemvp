@@ -2,15 +2,15 @@
   "text": [
     {
       "textCode": "TEXT_READ_BOOK_RESULT",
-      "template": "本回合阅读了《{{bookName}}》，进度增加{{progressDelta}}，疲劳变化{{fatigueDelta}}。"
+      "template": "你完成了一次阅读：《{{bookName}}》进度增加{{progressDelta}}，疲劳消耗{{fatigueDelta}}点体力。"
     },
     {
       "textCode": "TEXT_PRACTICE_WRITING_RESULT",
-      "template": "你完成了一次文章练习，文章能力增加{{abilityDelta}}，疲劳变化{{fatigueDelta}}。"
+      "template": "你完成了一次练习文章，文章能力增加{{abilityDelta}}，疲劳消耗{{fatigueDelta}}点体力。"
     },
     {
       "textCode": "TEXT_REST_RESULT",
-      "template": "你休息了一个回合，疲劳降低{{fatigueDelta}}，健康恢复{{healthDelta}}。"
+      "template": "你完成了一次休息，恢复{{fatigueDelta}}点体力，健康恢复{{healthDelta}}。"
     },
     {
       "textCode": "TEXT_ACTION_REJECTED",

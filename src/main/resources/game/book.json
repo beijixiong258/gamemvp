@@ -115,7 +115,7 @@
         {
           "type": "MIN_GENERAL_ATTRIBUTE",
           "target": "characterZhili",
-          "value": 30
+          "value": 28
         },
         {
           "type": "MIN_CAREER_ABILITY",
@@ -161,7 +161,7 @@
         {
           "type": "MIN_GENERAL_ATTRIBUTE",
           "target": "characterZhili",
-          "value": 33
+          "value": 31
         },
         {
           "type": "MIN_GENERAL_ATTRIBUTE",
@@ -202,7 +202,7 @@
         {
           "type": "MIN_GENERAL_ATTRIBUTE",
           "target": "characterZhili",
-          "value": 30
+          "value": 28
         },
         {
           "type": "MIN_CAREER_ABILITY",
@@ -243,7 +243,7 @@
         {
           "type": "MIN_GENERAL_ATTRIBUTE",
           "target": "characterZhili",
-          "value": 38
+          "value": 36
         },
         {
           "type": "MIN_CAREER_ABILITY",
@@ -287,20 +287,20 @@
       "abilityWenzhangWeight": 30,
       "abilityCelunWeight": 50,
       "abilityWenxueWeight": 10,
-      "fatigueCost": 4,
+      "fatigueCost": 8,
       "totalKnowledge": 100,
       "knowledgeSummary": "以具体钱粮、河工和治事案例训练策论及文章组织。",
       "readingReward": {
-        "characterZhili": 3,
+        "characterZhili": 5,
         "characterDaode": 0,
-        "characterZhengzhi": 4,
+        "characterZhengzhi": 6,
         "characterJiaoji": 0,
         "characterTineng": 0,
         "abilityShizi": 0,
-        "abilityJingyi": 3,
-        "abilityWenzhang": 8,
-        "abilityCelun": 13,
-        "abilityWenxue": 3
+        "abilityJingyi": 5,
+        "abilityWenzhang": 10,
+        "abilityCelun": 18,
+        "abilityWenxue": 4
       }
     },
     {
@@ -318,19 +318,19 @@
       "abilityWenzhangWeight": 50,
       "abilityCelunWeight": 10,
       "abilityWenxueWeight": 0,
-      "fatigueCost": 4,
+      "fatigueCost": 12,
       "totalKnowledge": 120,
       "knowledgeSummary": "比较题意、破题与承题的结构，掌握更有效的考场行文方式。",
       "readingReward": {
-        "characterZhili": 2,
+        "characterZhili": 7,
         "characterDaode": 0,
         "characterZhengzhi": 0,
         "characterJiaoji": 0,
         "characterTineng": 0,
         "abilityShizi": 0,
-        "abilityJingyi": 8,
-        "abilityWenzhang": 13,
-        "abilityCelun": 3,
+        "abilityJingyi": 14,
+        "abilityWenzhang": 24,
+        "abilityCelun": 6,
         "abilityWenxue": 0
       }
     },
@@ -354,20 +354,210 @@
       "abilityWenzhangWeight": 20,
       "abilityCelunWeight": 70,
       "abilityWenxueWeight": 10,
-      "fatigueCost": 6,
+      "fatigueCost": 18,
       "totalKnowledge": 180,
       "knowledgeSummary": "权重原书内容是模型参数而非自然语言百科。游戏将研读数字天书抽象为推演与表达能力成长；纸笔推理指南讲解嵌入、注意力、前馈层与输出概率，不能把模型当作会替你作答的随身智能体。",
       "readingReward": {
-        "characterZhili": 4,
+        "characterZhili": 9,
         "characterDaode": 0,
         "characterZhengzhi": 0,
         "characterJiaoji": 0,
         "characterTineng": 0,
         "abilityShizi": 0,
         "abilityJingyi": 0,
-        "abilityWenzhang": 5,
+        "abilityWenzhang": 10,
         "abilityCelun": 15,
         "abilityWenxue": 3
+      }
+    },
+    {
+      "equipmentCode": "BOOK_MENGXUE_ZIKE",
+      "growthDomainCode": "DOMAIN_SHUSHENG",
+      "playerReadingEnabled": true,
+      "readingRequirement": [
+        {
+          "type": "MIN_AGE",
+          "value": 6
+        }
+      ],
+      "abilityShiziWeight": 80,
+      "abilityJingyiWeight": 0,
+      "abilityWenzhangWeight": 0,
+      "abilityCelunWeight": 0,
+      "abilityWenxueWeight": 20,
+      "fatigueCost": 3,
+      "totalKnowledge": 15,
+      "knowledgeSummary": "通过日用字词与短句练习巩固识字，积累基础文辞。",
+      "readingReward": {
+        "characterZhili": 1,
+        "characterDaode": 0,
+        "characterZhengzhi": 0,
+        "characterJiaoji": 0,
+        "characterTineng": 0,
+        "abilityShizi": 4,
+        "abilityJingyi": 0,
+        "abilityWenzhang": 0,
+        "abilityCelun": 0,
+        "abilityWenxue": 2
+      }
+    },
+    {
+      "equipmentCode": "BOOK_XIANGSHU_ZUOWEN",
+      "growthDomainCode": "DOMAIN_SHUSHENG",
+      "playerReadingEnabled": true,
+      "readingRequirement": [
+        {
+          "type": "MIN_AGE",
+          "value": 8
+        },
+        {
+          "type": "MIN_CAREER_ABILITY",
+          "target": "abilityShizi",
+          "value": 13
+        }
+      ],
+      "abilityShiziWeight": 0,
+      "abilityJingyiWeight": 0,
+      "abilityWenzhangWeight": 80,
+      "abilityCelunWeight": 0,
+      "abilityWenxueWeight": 20,
+      "fatigueCost": 4,
+      "totalKnowledge": 25,
+      "knowledgeSummary": "从叙事、说明与短论入手，练习句段组织和清楚表达。",
+      "readingReward": {
+        "characterZhili": 2,
+        "characterDaode": 0,
+        "characterZhengzhi": 0,
+        "characterJiaoji": 0,
+        "characterTineng": 0,
+        "abilityShizi": 0,
+        "abilityJingyi": 0,
+        "abilityWenzhang": 6,
+        "abilityCelun": 0,
+        "abilityWenxue": 2
+      }
+    },
+    {
+      "equipmentCode": "BOOK_JINGYI_BIANXI",
+      "growthDomainCode": "DOMAIN_SHUSHENG",
+      "playerReadingEnabled": true,
+      "readingRequirement": [
+        {
+          "type": "MIN_AGE",
+          "value": 10
+        },
+        {
+          "type": "MIN_GENERAL_ATTRIBUTE",
+          "target": "characterZhili",
+          "value": 28
+        },
+        {
+          "type": "MIN_CAREER_ABILITY",
+          "target": "abilityJingyi",
+          "value": 10
+        }
+      ],
+      "abilityShiziWeight": 0,
+      "abilityJingyiWeight": 75,
+      "abilityWenzhangWeight": 25,
+      "abilityCelunWeight": 0,
+      "abilityWenxueWeight": 0,
+      "fatigueCost": 6,
+      "totalKnowledge": 60,
+      "knowledgeSummary": "对照容易混淆的经义概念，练习解释、举例与辨析。",
+      "readingReward": {
+        "characterZhili": 3,
+        "characterDaode": 2,
+        "characterZhengzhi": 0,
+        "characterJiaoji": 0,
+        "characterTineng": 0,
+        "abilityShizi": 0,
+        "abilityJingyi": 10,
+        "abilityWenzhang": 4,
+        "abilityCelun": 0,
+        "abilityWenxue": 0
+      }
+    },
+    {
+      "equipmentCode": "BOOK_WENZHANG_ZHANGFA",
+      "growthDomainCode": "DOMAIN_SHUSHENG",
+      "playerReadingEnabled": true,
+      "readingRequirement": [
+        {
+          "type": "MIN_AGE",
+          "value": 12
+        },
+        {
+          "type": "MIN_GENERAL_ATTRIBUTE",
+          "target": "characterZhili",
+          "value": 36
+        },
+        {
+          "type": "MIN_CAREER_ABILITY",
+          "target": "abilityWenzhang",
+          "value": 18
+        }
+      ],
+      "abilityShiziWeight": 0,
+      "abilityJingyiWeight": 0,
+      "abilityWenzhangWeight": 70,
+      "abilityCelunWeight": 0,
+      "abilityWenxueWeight": 30,
+      "fatigueCost": 8,
+      "totalKnowledge": 110,
+      "knowledgeSummary": "选取虚构范文拆解起承转合、段落衔接和论证层次，供熟悉基础写作的学生深造。",
+      "readingReward": {
+        "characterZhili": 5,
+        "characterDaode": 0,
+        "characterZhengzhi": 0,
+        "characterJiaoji": 1,
+        "characterTineng": 0,
+        "abilityShizi": 0,
+        "abilityJingyi": 0,
+        "abilityWenzhang": 18,
+        "abilityCelun": 0,
+        "abilityWenxue": 8
+      }
+    },
+    {
+      "equipmentCode": "BOOK_ZHIXUE_TONGLUN",
+      "growthDomainCode": "DOMAIN_SHUSHENG",
+      "playerReadingEnabled": true,
+      "readingRequirement": [
+        {
+          "type": "MIN_AGE",
+          "value": 14
+        },
+        {
+          "type": "MIN_GENERAL_ATTRIBUTE",
+          "target": "characterZhili",
+          "value": 40
+        },
+        {
+          "type": "MIN_CAREER_ABILITY",
+          "target": "abilityJingyi",
+          "value": 25
+        }
+      ],
+      "abilityShiziWeight": 0,
+      "abilityJingyiWeight": 30,
+      "abilityWenzhangWeight": 35,
+      "abilityCelunWeight": 20,
+      "abilityWenxueWeight": 15,
+      "fatigueCost": 12,
+      "totalKnowledge": 160,
+      "knowledgeSummary": "面向进阶书生的架空研习教材，综合经义、文章与处世论证，强调比较材料与形成自洽判断。",
+      "readingReward": {
+        "characterZhili": 8,
+        "characterDaode": 3,
+        "characterZhengzhi": 3,
+        "characterJiaoji": 0,
+        "characterTineng": 0,
+        "abilityShizi": 0,
+        "abilityJingyi": 14,
+        "abilityWenzhang": 18,
+        "abilityCelun": 10,
+        "abilityWenxue": 8
       }
     }
   ]

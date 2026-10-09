@@ -68,7 +68,7 @@
       "equipmentName": "经世策论集",
       "equipmentType": "BOOK",
       "rarityCode": "RARE",
-      "price": 400,
+      "price": 1800,
       "supplierNpcCode": "NPC_SHANGREN",
       "description": "汇集钱粮、河工与地方治理议论的策论选本，书商称其为治世实用之学。"
     },
@@ -76,8 +76,8 @@
       "equipmentCode": "BOOK_BAGU_POTI",
       "equipmentName": "八股破题精义",
       "equipmentType": "BOOK",
-      "rarityCode": "RARE",
-      "price": 600,
+      "rarityCode": "EPIC",
+      "price": 4800,
       "supplierNpcCode": "NPC_SHANGREN",
       "description": "专讲破题、承题与篇章组织的考场诀窍，文辞收益高于普通蒙学教材。"
     },
@@ -86,7 +86,7 @@
       "equipmentName": "GPT-1的权重",
       "equipmentType": "BOOK",
       "rarityCode": "LEGENDARY",
-      "price": 1000,
+      "price": 30000,
       "supplierNpcCode": "NPC_SHANGREN",
       "description": "来自未来的《WEIGHTS：GPT-1完整参数》，约1.17亿个浮点数印成八十卷天书，首卷附纸笔手算推理指南。没有八股范文，只有密密麻麻的参数。书商说背完便能出口成章；你怀疑算完一句话，朝代都换了。游戏将整套书抽象为一件物品。"
     },
@@ -96,9 +96,58 @@
       "equipmentType": "CONSUMABLE",
       "rarityCode": "COMMON",
       "price": 20,
-      "description": "书铺备下的一份清茶，饮用后恢复10点疲劳；没有疲劳时无需饮用。",
+      "description": "书铺备下的一份清茶，饮用后最多恢复10点体力；体力充足时无需饮用。",
       "supplierNpcCode": "NPC_SHANGREN",
+      "restoration": {
+        "staminaRecovery": 10,
+        "healthCost": 0
+      },
       "useEffectCode": "RELIEVE_FATIGUE"
+    },
+    {
+      "equipmentCode": "BOOK_MENGXUE_ZIKE",
+      "equipmentName": "蒙学字课",
+      "equipmentType": "BOOK",
+      "rarityCode": "COMMON",
+      "price": 100,
+      "description": "通过日用字词与短句练习巩固识字，积累基础文辞。",
+      "supplierNpcCode": "NPC_SHANGREN"
+    },
+    {
+      "equipmentCode": "BOOK_XIANGSHU_ZUOWEN",
+      "equipmentName": "乡塾作文入门",
+      "equipmentType": "BOOK",
+      "rarityCode": "COMMON",
+      "price": 200,
+      "description": "从叙事、说明与短论入手，练习句段组织和清楚表达。",
+      "supplierNpcCode": "NPC_SHANGREN"
+    },
+    {
+      "equipmentCode": "BOOK_JINGYI_BIANXI",
+      "equipmentName": "经义辨析录",
+      "equipmentType": "BOOK",
+      "rarityCode": "UNCOMMON",
+      "price": 700,
+      "description": "对照容易混淆的经义概念，练习解释、举例与辨析。",
+      "supplierNpcCode": "NPC_SHANGREN"
+    },
+    {
+      "equipmentCode": "BOOK_WENZHANG_ZHANGFA",
+      "equipmentName": "文章章法集",
+      "equipmentType": "BOOK",
+      "rarityCode": "RARE",
+      "price": 2200,
+      "description": "选取虚构范文拆解起承转合、段落衔接和论证层次，供熟悉基础写作的学生深造。",
+      "supplierNpcCode": "NPC_SHANGREN"
+    },
+    {
+      "equipmentCode": "BOOK_ZHIXUE_TONGLUN",
+      "equipmentName": "治学通论",
+      "equipmentType": "BOOK",
+      "rarityCode": "EPIC",
+      "price": 6000,
+      "description": "面向进阶书生的架空研习教材，综合经义、文章与处世论证，强调比较材料与形成自洽判断。",
+      "supplierNpcCode": "NPC_SHANGREN"
     }
   ]
 }

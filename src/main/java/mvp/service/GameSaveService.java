@@ -8,6 +8,7 @@ import mvp.engine.CharacterEngine.ScholarState;
 import mvp.engine.CharacterEngine.ReadingReward;
 import mvp.entity.CareerProfileShusheng;
 import mvp.entity.Character;
+import mvp.entity.DialogueRecord;
 import mvp.entity.EventRecord;
 import mvp.entity.ExamRecord;
 import mvp.entity.FamilyBackground;
@@ -56,22 +57,25 @@ public interface GameSaveService extends IService<GameSave> {
      */
     List<LibraryBook> listBooks(String saveId);
 
-    /** 为当前回合的指定书籍生成并缓存体会题；重复请求复用原题，不消耗回合。 */
+    /** 为当前回合的指定书籍生成并缓存阅读题目；首次成功消耗体力，缓存免费，不占主要行动。 */
     JSONObject preparePlayerReading(String saveId, String bookCode, PlayerReadingQuestionCommand command);
 
-    /** 评阅玩家体会并结算一个读书回合；questionId同时作为本题唯一交卷依据。 */
+    /** 评阅阅读回答并占用本回合主要行动；questionId同时作为本题唯一提交依据。 */
     JSONObject completePlayerReading(String saveId, String bookCode, PlayerReadingAnswerCommand command);
 
     /**
-     * 结算一次固定行动，并在同一事务中保存数值、日历及触发的考试。
+     * 结算一次固定行动，在同一事务中保存数值及本回合主要行动额度，不推进日历。
      *
      * @param command 稳定请求编号、行动、场景、可选书籍及预期累计回合
      * @return 行动后的存档、实际变化、骰点和反馈；重传返回原结果
      */
     JSONObject executeFixedAction(String saveId, FixedActionCommand command);
 
+    /** 手动结束当前游戏回合；不要求先行动，也不自动恢复体力。 */
+    JSONObject endTurn(String saveId, EndTurnCommand command);
+
     /**
-     * 按考试快照计分并生成系统代行答卷与总结，阶段考试恢复求学，县试结束本局。
+     * 按考试快照计分并生成考试答卷与总结，阶段考试恢复求学，县试结束本局。
      *
      * @param examId 已触发的考试记录ID
      * @return 成绩、更新后的存档及是否为首次结算
@@ -83,7 +87,7 @@ public interface GameSaveService extends IService<GameSave> {
 
     /**
      * 评价玩家答案、由引擎计分并保存考试；相同requestId和原文返回原响应。
-     * 答案不超过8000字符，内容修正最多正负10分，失败不保存部分结果。
+     * 答案不超过8000字符，答卷采用0至100整数评分，最终成绩由考试引擎换算；失败不保存部分结果。
      */
     JSONObject completePlayerExam(String saveId, String examId, PlayerExamCommand command);
 
@@ -112,7 +116,7 @@ public interface GameSaveService extends IService<GameSave> {
     JSONObject executeCharacterAction(String saveId, String actorId, FixedActionCommand command);
 
     /**
-     * 使用指定人物的考试快照完成系统代行；只有玩家考试可以切换存档阶段或结束本局。
+     * 使用指定人物的考试快照完成考试；只有玩家考试可以切换存档阶段或结束本局。
      *
      * @param actorId 应考人物ID，空时使用玩家
      * @param examId 已触发的考试ID
@@ -138,21 +142,21 @@ public interface GameSaveService extends IService<GameSave> {
     JSONObject executeFreeAction(String saveId, String actorId, FreeActionCommand command);
 
     /**
-     * 在短事务中核对模型调用前快照，保存属性、交易和可选的回合推进。
+     * 在短事务中核对模型调用前快照，保存属性、交易与本次AI业务费用，不推进日历。
      *
      * @param requestId 结算请求编号
      * @param settlement 引擎计算结果，非结束对话时为空
      * @param acquisitions 本次明确执行的获取行为
      * @param npcChanges 本次实际观察或互动的人物身份与保留决策
      * @param sceneItemChanges 本次确认的场景物品及保留决策
-     * @param endTurn 是否推进普通回合
+     * @param freeAction 是否为自定义行动（用于事件分类；不会推进游戏回合）
      * @param summary 行为摘要
      * @param milestone 是否记录人生节点
      * @return 已执行结果；重复请求返回原结果
      */
     JSONObject settleAiAction(ActionContext before, String requestId, Object payload, DriverResult settlement,
                              List<AcquisitionIntent> acquisitions, List<NpcIntent> npcChanges,
-                             List<SceneItemChange> sceneItemChanges, boolean endTurn, String summary, boolean milestone);
+                             List<SceneItemChange> sceneItemChanges, boolean freeAction, String summary, boolean milestone);
 
     record StartLifeCommand(
             String characterName,
@@ -180,7 +184,10 @@ public interface GameSaveService extends IService<GameSave> {
             List<InventoryItem> backpack,
             List<Character> npcs,
             List<SceneItem> sceneItems,
-            List<SupplyOffer> supplies
+            List<SupplyOffer> supplies,
+            ActionRules actionRules,
+            boolean backgroundGenerated,
+            DialogueRecord activeDialogue
     ) {
     }
 
@@ -191,6 +198,14 @@ public interface GameSaveService extends IService<GameSave> {
             String bookCode,
             Long expectedTurnNumber
     ) {
+    }
+
+    record EndTurnCommand(String requestId, Long expectedTurnNumber) {
+    }
+
+    record ActionRules(int aiStaminaCost, int practiceStaminaCost, int restStaminaRecovery,
+                       int restHealthRecovery, int overworkThreshold, int examStaminaCost,
+                       int restHealthCap, int consumableStaminaRecoveryLimit) {
     }
 
     record ActionChanges(
@@ -226,7 +241,7 @@ public interface GameSaveService extends IService<GameSave> {
     }
 
     record ActionContext(String saveId, String actorId, long turnNumber, String sceneCode,
-                         CharacterState character, ScholarState scholar, String contextSummary) {
+                         CharacterState character, ScholarState scholar, String contextSummary, String stateSnapshot) {
     }
 
     record SaveSummary(String saveId, String characterName, int age, int currentYear, String status,

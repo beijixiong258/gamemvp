@@ -412,7 +412,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
 
     private void requirePlayerReading(LibraryBook book) {
         if (!book.playerReadingEnabled()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "这本书不支持以身入局读书");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "这本书不支持阅读（手动）");
         }
         if (!book.readable()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, String.join("；", book.blockedReasons()));
@@ -557,7 +557,7 @@ public class BookServiceImpl extends ServiceImpl<BookMapper, Book> implements Bo
                 book.getKnowledgeSummary(), context.ownedQuantities().getOrDefault(book.getEquipmentId(), 0),
                 equipment.getPrice(), equipment.getSupplierNpcCode(), book.getTotalKnowledge(),
                 characterEngine.knowledgeContribution(book.getTotalKnowledge(), currentProgress),
-                configuredReward(equipment.getEquipmentCode()));
+                configuredReward(equipment.getEquipmentCode()), book.getFatigueCost());
     }
 
     /**

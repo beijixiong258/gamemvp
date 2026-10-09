@@ -34,7 +34,7 @@ public interface ExamRecordService extends IService<ExamRecord> {
     /** 在调用方的存档锁事务内保存思路；并发请求复用首先保存的结果，不结算考试。 */
     ExamRecord saveThought(GameSave save, String characterId, ExamRecord before, String thought);
 
-    /** 在事务外由引擎计算系统代行成绩，再让AI生成相符的答卷和总结；已完成时不再调用AI。 */
+    /** 在事务外由引擎计算系统操作成绩，再让AI生成相符的答卷和总结；已完成时不再调用AI。 */
     ExamResolution resolveAuto(ExamRecord exam, String characterContext);
 
     /** 在事务外评价玩家原文、由引擎计分，再生成结果总结；相同已交答案不重复评价。 */

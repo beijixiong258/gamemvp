@@ -34,7 +34,7 @@ public class ExamEngine {
     }
 
     /**
-     * 将不封顶的总学识换算成考试知识分，首版每2学识为1分。
+     * 将总学识归一化为快照参考分；当前MVP知识权重为0，不计入成绩。
      *
      * @param knowledgeTotal 全部书籍贡献的学识总量
      * @return 0到100的考试知识分
@@ -86,21 +86,19 @@ public class ExamEngine {
     }
 
     /**
-     * 根据健康、疲劳和体能计算确定的临场状态偏移。
+     * 根据健康和绝对剩余体力计算临场修正，体能只通过体力上限间接作用。
      *
-     * @return -8到4之间的整数状态偏移
+     * @return -5到0之间的整数状态偏移；健康不低于50且不过劳时无惩罚
      */
     public int stateOffset(CharacterEngine.CharacterState character) {
-        BigDecimal healthModifier = BigDecimal.valueOf(character.characterJiankang() - 70L)
-                .multiply(Calculator.decimal("0.06"));
-        BigDecimal fatigueModifier = BigDecimal.valueOf(-Math.max(0, character.characterPilao() - 20L))
-                .multiply(Calculator.decimal("0.08"));
-        BigDecimal fitnessModifier = BigDecimal.valueOf(character.characterTineng() - 50L)
-                .multiply(Calculator.decimal("0.03"));
+        BigDecimal healthModifier = BigDecimal.ONE.subtract(CharacterEngine.healthFactor(character.characterJiankang()))
+                .multiply(BigDecimal.valueOf(-6));
+        BigDecimal overworkModifier = character.stamina() <= GameRuleConstant.OVERWORK_STAMINA_THRESHOLD
+                ? BigDecimal.valueOf(-3) : BigDecimal.ZERO;
         BigDecimal result = Calculator.clamp(
-                Calculator.decimal("-8"),
-                Calculator.decimal("4"),
-                healthModifier.add(fatigueModifier).add(fitnessModifier)
+                Calculator.decimal("-5"),
+                BigDecimal.ZERO,
+                healthModifier.add(overworkModifier)
         );
         return Calculator.roundToInt(result);
     }
@@ -125,7 +123,7 @@ public class ExamEngine {
     }
 
     /**
-     * 结算系统代行路径，在角色能力及身体状态基础上应用已冻结的骰点。
+     * 结算系统操作路径，在角色能力及身体状态基础上应用已冻结的骰点。
      *
      * @param diceRoll 考试开始时保存的骰点，不能在重传时重投
      * @param luckOffset 考试准备时已保存的普通骰点修正
@@ -137,30 +135,36 @@ public class ExamEngine {
     }
 
     /**
-     * 结算玩家“以身入局”路径，在角色成绩上叠加答案内容修正。
+     * 结算玩家“以身入局”路径，以答卷相对60分的表现主导相对及格线的成绩。
      *
-     * @param contentModifier AI给出的答案内容修正，先限制在-10至10，再取整
+     * @param answerScore AI给出的0至100答卷分；答卷权重80%，角色权重20%，普通运气缩小到20%
      * @param diceRoll 考试开始时保存的骰点，不能在重传时重投
      * @param luckOffset 考试准备时已保存的普通骰点修正
-     * @return 最终成绩、实际采用的内容修正与通过状态
+     * @return 最终成绩、相对原自动基线B+R+L的最终调整与通过状态；1/100仍强制覆盖结果
      */
     public ExamResult settlePlayer(
             int baseAbilityScore,
             int stateOffset,
-            BigDecimal contentModifier,
+            BigDecimal answerScore,
             int diceRoll,
             int luckOffset,
             int passThreshold
     ) {
-        int effectiveContentModifier = Calculator.clamp(
-                BigDecimal.valueOf(-10), BigDecimal.TEN, contentModifier
-        ).setScale(0, RoundingMode.HALF_UP).intValue();
-        int finalScore = Calculator.clamp(
-                0,
-                100,
-                baseAbilityScore + stateOffset + effectiveContentModifier + luckOffset
-        );
-        return result(finalScore, effectiveContentModifier, diceRoll, passThreshold);
+        if (answerScore == null) throw new IllegalArgumentException("缺少答卷评分");
+        BigDecimal boundedAnswer = Calculator.clamp(BigDecimal.ZERO, BigDecimal.valueOf(100), answerScore);
+        BigDecimal answerContribution = boundedAnswer
+                .subtract(BigDecimal.valueOf(GameRuleConstant.PLAYER_EXAM_ANSWER_PASS_SCORE))
+                .multiply(Calculator.ratio(GameRuleConstant.PLAYER_EXAM_ANSWER_WEIGHT_PERCENT));
+        BigDecimal characterContribution = BigDecimal.valueOf(baseAbilityScore - passThreshold)
+                .multiply(Calculator.ratio(GameRuleConstant.PLAYER_EXAM_CHARACTER_WEIGHT_PERCENT));
+        int reducedLuck = Calculator.roundToInt(BigDecimal.valueOf(luckOffset)
+                .multiply(Calculator.ratio(GameRuleConstant.PLAYER_EXAM_LUCK_WEIGHT_PERCENT)));
+        int finalScore = Calculator.clamp(0, 100, passThreshold
+                + Calculator.roundToInt(answerContribution.add(characterContribution)) + stateOffset + reducedLuck);
+        ExamResult settled = result(finalScore, 0, diceRoll, passThreshold);
+        return new ExamResult(settled.finalScore(),
+                settled.finalScore() - (baseAbilityScore + stateOffset + luckOffset),
+                settled.passed(), settled.status());
     }
 
     /**

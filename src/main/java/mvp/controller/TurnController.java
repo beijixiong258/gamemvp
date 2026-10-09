@@ -17,6 +17,11 @@ public class TurnController {
 
     private final GameSaveService gameSaveService;
 
+    @PostMapping("/{saveId}/end-turn")
+    public JSONObject endTurn(@PathVariable String saveId, @RequestBody GameSaveService.EndTurnCommand command) {
+        return gameSaveService.endTurn(saveId, command);
+    }
+
     /**
      * 提交读书、练习文章或休息，并返回本回合完整结算。
      *

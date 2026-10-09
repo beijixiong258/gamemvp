@@ -5,7 +5,6 @@ import org.springframework.stereotype.Component;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.function.IntBinaryOperator;
 
 import static mvp.engine.GameRuleConstant.BOOK_COMPLETION_PROGRESS;
@@ -21,8 +20,9 @@ public class CharacterEngine {
     private static final int ATTRIBUTE_MAX = 100;
     private static final BigDecimal INTELLIGENCE_BASE = Calculator.decimal("0.75");
     private static final BigDecimal INTELLIGENCE_WEIGHT = Calculator.decimal("0.50");
-    private static final BigDecimal CONDITION_MIN = Calculator.decimal("0.55");
-    private static final BigDecimal CONDITION_MAX = Calculator.decimal("1.20");
+    private static final BigDecimal OVERWORK_EFFICIENCY = Calculator.decimal("0.80");
+    private static final double SIGMOID_LOW = 1.0 / (1.0 + Math.exp(5.0));
+    private static final double SIGMOID_RANGE = 1.0 / (1.0 + Math.exp(-5.0)) - SIGMOID_LOW;
 
     /**
      * “开始人生”直接返回六岁时的可玩状态，不创建零至五岁的逐年回合。
@@ -74,59 +74,75 @@ public class CharacterEngine {
         );
     }
 
-    /**
-     * 综合健康、体能和疲劳，计算当前身体状态效率。
-     *
-     * @return 限制在0.55到1.20之间的状态效率系数
-     */
+    /** 健康0～50按归一化sigmoid提供0.50～1.00效率；50及以上不惩罚，也不额外增益。 */
+    public BigDecimal healthFactor(CharacterState character) {
+        return healthFactor(character.characterJiankang());
+    }
+
+    public static BigDecimal healthFactor(int healthValue) {
+        int health = Calculator.clamp(0, 50, healthValue);
+        if (health == 0) return Calculator.decimal("0.50");
+        if (health == 25) return Calculator.decimal("0.75");
+        if (health == 50) return BigDecimal.ONE;
+        double sigmoid = 1.0 / (1.0 + Math.exp(-0.20 * (health - 25)));
+        return BigDecimal.valueOf(0.50 + 0.50 * (sigmoid - SIGMOID_LOW) / SIGMOID_RANGE);
+    }
+
+    /** 行动前剩余体力不高于20点时，学习效率再乘0.80。 */
     public BigDecimal conditionFactor(CharacterState character) {
-        BigDecimal value = Calculator.decimal("0.65")
-                .add(BigDecimal.valueOf(character.characterJiankang()).multiply(Calculator.decimal("0.003")))
-                .add(BigDecimal.valueOf(character.characterTineng()).multiply(Calculator.decimal("0.002")))
-                .subtract(BigDecimal.valueOf(character.characterPilao()).multiply(Calculator.decimal("0.003")));
-        return Calculator.clamp(CONDITION_MIN, CONDITION_MAX, value);
+        BigDecimal value = healthFactor(character);
+        return character.stamina() <= GameRuleConstant.OVERWORK_STAMINA_THRESHOLD
+                ? value.multiply(OVERWORK_EFFICIENCY) : value;
+    }
+
+    /** 体能0～100映射到整数上限50～150；锚点直返，避免向下取整受浮点尾差影响。 */
+    public static int maxStamina(int fitness) {
+        int value = Calculator.clamp(0, 100, fitness);
+        if (value == 0) return 50;
+        if (value == 50) return 100;
+        if (value == 100) return 150;
+        double sigmoid = 1.0 / (1.0 + Math.exp(-0.10 * (value - 50)));
+        return (int) Math.floor(50.0 + 100.0 * (sigmoid - SIGMOID_LOW) / SIGMOID_RANGE);
+    }
+
+    public int stamina(CharacterState character) {
+        return character.stamina();
+    }
+
+    /** 消耗采用固定整数成本；不足时不产生任何状态，成功消费后处于过劳区间则损失1健康。 */
+    public CharacterState consumeStamina(CharacterState character, int cost) {
+        if (cost < 0) throw new IllegalArgumentException("体力消耗不能为负数");
+        if (character.stamina() < cost) throw new IllegalArgumentException("当前体力不足，不能执行该行动");
+        int remaining = character.stamina() - cost;
+        int damage = cost > 0 && remaining <= GameRuleConstant.OVERWORK_STAMINA_THRESHOLD
+                ? GameRuleConstant.OVERWORK_HEALTH_LOSS : 0;
+        return withCondition(character, Math.max(0, character.characterJiankang() - damage), remaining);
+    }
+
+    /** 只恢复体力，不附带恢复健康，也不改变体力上限。 */
+    public CharacterState recoverStamina(CharacterState character, int recovery) {
+        if (recovery < 0) throw new IllegalArgumentException("体力恢复不能为负数");
+        int remaining = (int) Math.min(character.maxStamina(), (long) character.stamina() + recovery);
+        return withCondition(character, character.characterJiankang(), remaining);
+    }
+
+    private CharacterState withCondition(CharacterState character, int health, int stamina) {
+        return new CharacterState(character.characterZhili(), character.characterDaode(), character.characterZhengzhi(),
+                character.characterJiaoji(), character.characterTineng(), health,
+                character.maxStamina() - Calculator.clamp(0, character.maxStamina(), stamina));
+    }
+
+    /** 体能变化只改变上限，当前体力保留绝对点数；上限下降时截断超出的当前值。 */
+    private CharacterState preserveStamina(CharacterState before, CharacterState after) {
+        return withCondition(after, after.characterJiankang(), Math.min(before.stamina(), after.maxStamina()));
     }
 
     /**
-     * 根据行动基础疲劳和人物状态计算实际疲劳增长。
-     *
-     * @param baseFatigue 行动配置的基础疲劳
-     * @return 本次行动实际增加的整数疲劳
-     */
-    public int fatigueGain(int baseFatigue, CharacterState character) {
-        if (baseFatigue <= 0) {
-            return 0;
-        }
-        BigDecimal fitnessCostFactor = Calculator.decimal("1.15")
-                .subtract(Calculator.divide(BigDecimal.valueOf(character.characterTineng()), 200));
-        int missingHealth = Math.max(0, 60 - character.characterJiankang());
-        BigDecimal lowHealthFactor = Calculator.ONE
-                .add(Calculator.divide(BigDecimal.valueOf(missingHealth), 100));
-        int result = Calculator.roundToInt(
-                BigDecimal.valueOf(baseFatigue).multiply(fitnessCostFactor).multiply(lowHealthFactor)
-        );
-        return Math.max(1, result);
-    }
-
-    /**
-     * 计算疲劳超过80后造成的健康损失。
-     *
-     * @param fatigueAfter 行动结算后的疲劳值
-     * @return 本次过劳造成的健康损失
-     */
-    public int exhaustionDamage(int fatigueAfter) {
-        if (fatigueAfter <= 80) {
-            return 0;
-        }
-        return (fatigueAfter - 80 + 9) / 10;
-    }
-
-    /**
-     * 结算一次读书行动，包括阅读进度、书生能力、疲劳和过劳伤害。
+     * 结算一次读书行动，包括阅读进度、书生能力、体力消耗和过劳伤害。
      *
      * @param book 所读书籍的规则快照
      * @param progress 结算前的该书阅读记录
-     * @param settlementTurnNumber 本次行动推进后的总回合编号
+     * @param settlementTurnNumber 本次行动所属的总回合编号，行动本身不负责推进时间
      * @param diceRoll 业务层已生成的1D100骰点；1无学习收益，100补满进度
      * @return 读书后的完整状态和实际变化
      */
@@ -147,10 +163,11 @@ public class CharacterEngine {
         } else if (diceRoll == 100) {
             progressGain = remainingProgress;
         }
-        return settleReading(character, scholar, book, progress, settlementTurnNumber, progressGain, diceRoll);
+        return settleReading(character, scholar, book, progress, settlementTurnNumber, progressGain, diceRoll,
+                book.fatigueCost());
     }
 
-    /** 以身入局将0至100分线性换算为10至90点进度；成长按实际新增进度发放，疲劳按一次阅读计算。 */
+    /** 阅读（手动）将0至100分换算为10至90点进度；体力只扣本书阅读成本。 */
     public ReadBookResult readBookAsPlayer(
             CharacterState character, ScholarState scholar, BookRule book, BookProgress progress,
             long settlementTurnNumber, int score
@@ -162,7 +179,7 @@ public class CharacterEngine {
         );
         int remainingProgress = Math.max(0, BOOK_COMPLETION_PROGRESS - progress.currentProgress());
         return settleReading(character, scholar, book, progress, settlementTurnNumber,
-                Math.min(remainingProgress, awardedProgress), null);
+                Math.min(remainingProgress, awardedProgress), null, book.fatigueCost());
     }
 
     private BigDecimal readingStudyAmount(CharacterState character) {
@@ -173,7 +190,7 @@ public class CharacterEngine {
 
     private ReadBookResult settleReading(
             CharacterState character, ScholarState scholar, BookRule book, BookProgress progress,
-            long settlementTurnNumber, int progressGain, Integer diceRoll
+            long settlementTurnNumber, int progressGain, Integer diceRoll, int staminaCost
     ) {
         if (progress.currentProgress() >= BOOK_COMPLETION_PROGRESS) {
             throw new IllegalArgumentException("这本书已完成，不能继续阅读");
@@ -187,8 +204,8 @@ public class CharacterEngine {
         ReadingReward alreadyEarned = book.readingReward().atProgress(progress.currentProgress())
                 .maximum(progress.legacyReward());
         ReadingReward reward = book.readingReward().atProgress(progressAfter).subtractPositive(alreadyEarned);
-        // 骰点1没有新增进度，因此不会重复发放成长；疲劳仍按行动前的身体状态计算。
-        WorkCondition workCondition = settleWorkCondition(character, book.fatigueCost());
+        // 骰点1没有新增进度，但仍消耗这次阅读的固定体力成本。
+        WorkCondition workCondition = settleWorkCondition(character, staminaCost);
         CharacterState characterAfter = applyReadingAttributes(workCondition.characterAfter(), reward);
         ScholarState scholarAfter = applyReadingAbilities(scholar, reward);
         ScholarState appliedGain = difference(scholar, scholarAfter);
@@ -216,21 +233,12 @@ public class CharacterEngine {
     /**
      * 结算一次练习文章行动。
      *
-     * @return 练习后的能力、疲劳和健康结果
+     * @return 练习后的能力、体力和健康结果
      */
     public PracticeWritingResult practiceWriting(CharacterState character, ScholarState scholar) {
-        BigDecimal writingDiminishing = Calculator.clamp(
-                Calculator.decimal("0.25"),
-                Calculator.ONE,
-                Calculator.ONE.subtract(
-                        BigDecimal.valueOf(scholar.abilityWenzhang())
-                                .divide(Calculator.decimal("120"), 8, RoundingMode.HALF_UP)
-                )
-        );
-        BigDecimal rawGain = Calculator.decimal("2.40")
-                .multiply(intelligenceFactor(character))
-                .multiply(conditionFactor(character))
-                .multiply(writingDiminishing);
+        // 固定成长不依赖当前文章和智力，避免先练习再读书能多领成长。
+        BigDecimal rawGain = BigDecimal.valueOf(GameRuleConstant.PRACTICE_WRITING_BASE_GAIN)
+                .multiply(conditionFactor(character));
         int roundedGain = Math.max(0, Calculator.roundToInt(rawGain));
         int abilityAfter = Calculator.clamp(
                 ATTRIBUTE_MIN,
@@ -244,7 +252,7 @@ public class CharacterEngine {
                 scholar.abilityCelun(),
                 scholar.abilityWenxue()
         );
-        WorkCondition workCondition = settleWorkCondition(character, 4);
+        WorkCondition workCondition = settleWorkCondition(character, GameRuleConstant.PRACTICE_STAMINA_COST);
         return new PracticeWritingResult(
                 workCondition.characterAfter(),
                 scholarAfter,
@@ -255,31 +263,17 @@ public class CharacterEngine {
     }
 
     /**
-     * 结算一次休息行动，先恢复疲劳，再恢复健康。
+     * 结算一次休息行动，恢复固定体力和健康，不因体能重复放大收益。
      *
      * @return 休息后的人物状态和实际恢复量
      */
     public RestResult rest(CharacterState character) {
-        int plannedFatigueRecovery = 18 + Calculator.roundToInt(
-                BigDecimal.valueOf(character.characterTineng()).multiply(Calculator.decimal("0.10"))
-        );
-        int fatigueAfter = Math.max(0, character.characterPilao() - plannedFatigueRecovery);
-        int plannedHealthRecovery = 3
-                + character.characterTineng() / 25
-                + (character.characterPilao() >= 70 ? 1 : 0);
-        int healthAfter = Math.min(100, character.characterJiankang() + plannedHealthRecovery);
-        CharacterState characterAfter = new CharacterState(
-                character.characterZhili(),
-                character.characterDaode(),
-                character.characterZhengzhi(),
-                character.characterJiaoji(),
-                character.characterTineng(),
-                healthAfter,
-                fatigueAfter
-        );
+        CharacterState recovered = recoverStamina(character, GameRuleConstant.REST_STAMINA_RECOVERY);
+        int healthAfter = ordinaryHealthRecovery(character.characterJiankang(), GameRuleConstant.REST_HEALTH_RECOVERY);
+        CharacterState characterAfter = withCondition(recovered, healthAfter, recovered.stamina());
         return new RestResult(
                 characterAfter,
-                character.characterPilao() - fatigueAfter,
+                characterAfter.stamina() - character.stamina(),
                 healthAfter - character.characterJiankang()
         );
     }
@@ -313,16 +307,10 @@ public class CharacterEngine {
                 applyBoundedChange(scholar.abilityWenxue(), patch.abilityWenxueGain())
         );
 
-        int fatigueOffset = Calculator.roundToInt(patch.fatigueOffset());
-        int fatigueAfter = Calculator.clamp(0, 100, character.characterPilao() + fatigueOffset);
-        int exhaustionDamage = fatigueOffset > 0 ? exhaustionDamage(fatigueAfter) : 0;
-        int healthAfter = Calculator.clamp(
-                0,
-                100,
-                character.characterJiankang()
-                        + Calculator.roundToInt(patch.healthOffset())
-                        - exhaustionDamage
-        );
+        // AI没有体力恢复或额外消耗权限；统一业务成本由服务层在同一事务内扣除。
+        int healthChange = Calculator.roundToInt(patch.healthOffset());
+        int healthAfter = healthChange > 0 ? ordinaryHealthRecovery(character.characterJiankang(), healthChange)
+                : Calculator.clamp(0, 100, character.characterJiankang() + healthChange);
         characterAfter = new CharacterState(
                 characterAfter.characterZhili(),
                 characterAfter.characterDaode(),
@@ -330,20 +318,26 @@ public class CharacterEngine {
                 characterAfter.characterJiaoji(),
                 characterAfter.characterTineng(),
                 healthAfter,
-                fatigueAfter
+                character.characterPilao()
         );
-        return new DriverResult(characterAfter, scholarAfter, exhaustionDamage);
+        return new DriverResult(preserveStamina(character, characterAfter), scholarAfter, 0);
+    }
+
+    /** 普通恢复最多到75；已有75以上的健康不因恢复而被降低。 */
+    private int ordinaryHealthRecovery(int health, int recovery) {
+        return Math.max(health, Math.min(GameRuleConstant.REST_HEALTH_CAP, health + recovery));
     }
 
     /** 书籍成长只受0～100属性范围约束，不经过AI单次变化上限。 */
     public CharacterState applyReadingAttributes(CharacterState current, ReadingReward reward) {
-        return new CharacterState(
+        CharacterState after = new CharacterState(
                 Calculator.clamp(0, 100, current.characterZhili() + reward.characterZhili()),
                 Calculator.clamp(0, 100, current.characterDaode() + reward.characterDaode()),
                 Calculator.clamp(0, 100, current.characterZhengzhi() + reward.characterZhengzhi()),
                 Calculator.clamp(0, 100, current.characterJiaoji() + reward.characterJiaoji()),
                 Calculator.clamp(0, 100, current.characterTineng() + reward.characterTineng()),
                 current.characterJiankang(), current.characterPilao());
+        return preserveStamina(current, after);
     }
 
     public ScholarState applyReadingAbilities(ScholarState current, ReadingReward reward) {
@@ -397,25 +391,14 @@ public class CharacterEngine {
     }
 
     /**
-     * 统一结算劳累行动产生的疲劳与过劳健康损失。
+     * 统一结算行动的固定体力消耗与过劳健康损失。
      *
-     * @return 行动后人物状态、实际疲劳增长和健康损失
+     * @return 行动后人物状态、实际体力消耗和健康损失（fatigueGain保留兼容字段名）
      */
-    private WorkCondition settleWorkCondition(CharacterState character, int baseFatigue) {
-        int fatigueGain = fatigueGain(baseFatigue, character);
-        int fatigueAfter = Calculator.clamp(0, 100, character.characterPilao() + fatigueGain);
-        int exhaustionDamage = fatigueGain > 0 ? exhaustionDamage(fatigueAfter) : 0;
-        int healthAfter = Calculator.clamp(0, 100, character.characterJiankang() - exhaustionDamage);
-        CharacterState characterAfter = new CharacterState(
-                character.characterZhili(),
-                character.characterDaode(),
-                character.characterZhengzhi(),
-                character.characterJiaoji(),
-                character.characterTineng(),
-                healthAfter,
-                fatigueAfter
-        );
-        return new WorkCondition(characterAfter, fatigueAfter - character.characterPilao(), exhaustionDamage);
+    private WorkCondition settleWorkCondition(CharacterState character, int cost) {
+        CharacterState after = consumeStamina(character, cost);
+        return new WorkCondition(after, character.stamina() - after.stamina(),
+                character.characterJiankang() - after.characterJiankang());
     }
 
     /**
@@ -448,22 +431,24 @@ public class CharacterEngine {
      */
     public CharacterState enterIllness(CharacterState current) {
         int loss = GameRuleConstant.SICK_ATTRIBUTE_LOSS;
-        return new CharacterState(Math.max(0, current.characterZhili() - loss),
+        CharacterState after = new CharacterState(Math.max(0, current.characterZhili() - loss),
                 Math.max(0, current.characterDaode() - loss), Math.max(0, current.characterZhengzhi() - loss),
                 Math.max(0, current.characterJiaoji() - loss), Math.max(0, current.characterTineng() - loss),
                 0, current.characterPilao());
+        return preserveStamina(current, after);
     }
 
     /**
      * 结算一回合重病休养；最后一回合恢复到40健康。
      *
      * @param lastTurn 是否为最后一回合休养
-     * @return 疲劳恢复后的人物状态
+     * @return 体力恢复后的人物状态
      */
     public CharacterState recoverIllnessTurn(CharacterState current, boolean lastTurn) {
+        CharacterState recovered = recoverStamina(current, GameRuleConstant.REST_STAMINA_RECOVERY);
         return new CharacterState(current.characterZhili(), current.characterDaode(), current.characterZhengzhi(),
                 current.characterJiaoji(), current.characterTineng(),
-                lastTurn ? GameRuleConstant.SICK_RECOVERY_HEALTH : 0, Math.max(0, current.characterPilao() - 20));
+                lastTurn ? GameRuleConstant.SICK_RECOVERY_HEALTH : 0, recovered.characterPilao());
     }
 
     /**
@@ -483,7 +468,7 @@ public class CharacterEngine {
                 bounded(patch.attributeFitnessGain(), attributeLimit), bounded(patch.abilityShiziGain(), abilityLimit),
                 bounded(patch.abilityJingyiGain(), abilityLimit), bounded(patch.abilityWenzhangGain(), abilityLimit),
                 bounded(patch.abilityCelunGain(), abilityLimit), bounded(patch.abilityWenxueGain(), abilityLimit),
-                bounded(patch.fatigueOffset(), 20), bounded(patch.healthOffset(), 10));
+                BigDecimal.ZERO, bounded(patch.healthOffset(), 10));
     }
 
     private BigDecimal bounded(BigDecimal value, int limit) {
@@ -497,6 +482,7 @@ public class CharacterEngine {
     ) {
     }
 
+    /** characterPilao是兼容存储字段：记录距动态体力上限已消耗的点数。 */
     public record CharacterState(
             int characterZhili,
             int characterDaode,
@@ -506,6 +492,13 @@ public class CharacterEngine {
             int characterJiankang,
             int characterPilao
     ) implements Serializable {
+        public int maxStamina() {
+            return CharacterEngine.maxStamina(characterTineng);
+        }
+
+        public int stamina() {
+            return Calculator.clamp(0, maxStamina(), maxStamina() - characterPilao);
+        }
     }
 
     public record ScholarState(
@@ -560,6 +553,7 @@ public class CharacterEngine {
         }
     }
 
+    /** fatigueCost保留配置字段名，含义为本书一次阅读的固定体力成本。 */
     public record BookRule(ReadingReward readingReward, int fatigueCost) {
     }
 

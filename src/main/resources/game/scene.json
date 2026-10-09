@@ -115,7 +115,7 @@
     {
       "sceneCode": "SCENE_SISHU_CANGSHUGE",
       "sceneName": "知微私塾·藏书阁",
-      "description": "知微私塾的藏书阁，管书人沈砚介绍书目和阅读条件，可以普通阅读。免费教材需到讲堂向窦苞领取，沈砚不能发书或免除门槛。",
+      "description": "知微私塾的藏书阁，管书人沈砚介绍书目和阅读条件，可以阅读。免费教材需到讲堂向窦苞领取，沈砚不能发书或免除门槛。",
       "availableActionCode": [
         "READ_BOOK",
         "FREE_ACTION",

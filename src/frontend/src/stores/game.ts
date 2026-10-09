@@ -34,6 +34,21 @@ export const useGameStore = defineStore('game', () => {
   const player = computed(() => detail.value?.character)
   const readyExam = computed(() => detail.value?.exams.find(e => e.characterId === player.value?.id && e.status === 'READY'))
   const sick = computed(() => !!player.value && (player.value.characterJiankang <= 0 || player.value.sickTurnsRemaining > 0))
+  const majorActionUsed = computed(() => !!detail.value && player.value?.majorActionTurn === detail.value.save.totalTurnNumber)
+  const aiStaminaCost = computed(() => detail.value?.actionRules.aiStaminaCost ?? 0)
+  const overworked = computed(() => !!player.value && !!detail.value
+    && player.value.stamina <= detail.value.actionRules.overworkThreshold)
+  function staminaBlockedReason(cost: number) {
+    if (!detail.value) return '请先读取最新进度。'
+    return detail.value.character.stamina < cost
+      ? '体力不足：需要 ' + cost + ' 点，当前剩余 ' + detail.value.character.stamina + ' 点。' : ''
+  }
+  function mainActionBlockedReason(cost: number) {
+    if (detail.value?.save.status !== 'STUDYING') return '请先完成当前考试。'
+    if (sick.value) return '重病期间请结束回合进入强制休养。'
+    if (majorActionUsed.value) return '本回合主要行动已使用，请结束回合后继续。'
+    return staminaBlockedReason(cost)
+  }
   const path = () => segment(detail.value!.save.id)
   const actor = () => segment(detail.value!.character.id)
 
@@ -84,23 +99,14 @@ export const useGameStore = defineStore('game', () => {
     if (epoch !== readEpoch || detail.value?.save.id !== id) return
     detail.value = fresh; stale.value = false
     restoreQuestion(id)
+    restoreDialogue(fresh)
   }
-  async function syncDialogue(epoch: number) {
-    if (!detail.value || epoch !== readEpoch) return
-    const id = detail.value.save.id
-    const dialogueId = readLocal<string | null>(key(id, 'dialogue'), null)
-    if (!dialogueId) { dialogue.value = null; return }
-    const isCurrent = () => epoch === readEpoch && detail.value?.save.id === id
-      && readLocal<string | null>(key(id, 'dialogue'), null) === dialogueId
-    try {
-      const fresh = await request<Dialogue>('/dialogue/' + segment(id) + '/' + segment(dialogueId))
-      if (isCurrent()) dialogue.value = fresh
-    } catch (e) {
-      if (!isCurrent()) return
-      if (e instanceof ApiError && e.status === 404) {
-        dialogue.value = null; writeLocal(key(id, 'dialogue'), null)
-      } else throw e
-    }
+  function restoreDialogue(fresh: SaveDetail) {
+    // 活跃会话只由服务端确认；浏览器缓存丢失或残留均不能决定会话是否存在。
+    if (fresh.activeDialogue) dialogue.value = fresh.activeDialogue
+    else if (!dialogue.value?.ended || dialogue.value.saveId !== fresh.save.id) dialogue.value = null
+    // 当前页保留刚结束的交谈供查看，本地仅缓存仍活跃的会话 ID。
+    writeLocal(key(fresh.save.id, 'dialogue'), fresh.activeDialogue?.id ?? null)
   }
   async function enter(id: string) {
     if (busy.value) return
@@ -119,7 +125,7 @@ export const useGameStore = defineStore('game', () => {
       const restoredText = formatReadingReward(restored)
       if (restoredText) notice.value = '已补齐阅读成长：' + restoredText + '。'
       restoreQuestion(id)
-      await syncDialogue(epoch)
+      restoreDialogue(fresh)
     } catch (e) { if (epoch === readEpoch) { error.value = message(e); stale.value = true } }
     finally { if (epoch === readEpoch) loading.value = false }
   }
@@ -128,7 +134,7 @@ export const useGameStore = defineStore('game', () => {
     if (!detail.value) return
     const epoch = ++readEpoch
     loading.value = true; error.value = ''
-    try { await syncDetail(epoch); if (epoch === readEpoch) await syncDialogue(epoch) }
+    try { await syncDetail(epoch) }
     catch (e) { if (epoch === readEpoch) { error.value = message(e); stale.value = true } }
     finally { if (epoch === readEpoch) loading.value = false }
   }
@@ -149,7 +155,7 @@ export const useGameStore = defineStore('game', () => {
       const status = e instanceof ApiError ? e.status : 0
       if (status >= 400 && status < 500 && status !== 408 && status !== 429) clearPending()
       if (status === 409) {
-        try { await syncDetail(epoch); await syncDialogue(epoch) } catch { if (epoch === readEpoch) stale.value = true }
+        try { await syncDetail(epoch) } catch { if (epoch === readEpoch) stale.value = true }
       }
       busy.value = false
       return
@@ -161,7 +167,7 @@ export const useGameStore = defineStore('game', () => {
     outcome.value = data
     if (operation.kind === 'dialogue-start') dialogue.value = result as Dialogue
     if (data.dialogue) dialogue.value = data.dialogue
-    if (dialogue.value) writeLocal(key(operation.saveId, 'dialogue'), dialogue.value.id)
+    if (dialogue.value) writeLocal(key(operation.saveId, 'dialogue'), dialogue.value.ended ? null : dialogue.value.id)
     if (operation.kind === 'question') {
       question.value = result as ReadingQuestion
       writeLocal(key(operation.saveId, 'question'), question.value)
@@ -170,9 +176,9 @@ export const useGameStore = defineStore('game', () => {
       question.value = null; writeLocal(key(operation.saveId, 'question'), null)
     }
     if (operation.kind === 'background' && detail.value) detail.value.familyBackground = result as FamilyBackground
-    notice.value = data.feedback || data.summary || data.applied?.summary
+    notice.value = data.feedback || [data.narrative, data.summary || data.applied?.summary].filter(Boolean).join('\n')
       || (operation.kind === 'acquire' ? '已取得' + data.equipmentName + ' ×' + data.quantity + '，花费 ' + data.cost + ' 文。'
-        : operation.kind === 'question' ? '题目已备好，请写下你的体会。'
+        : operation.kind === 'question' ? '阅读题目已备好，请写下你的回答。'
         : operation.kind === 'background' ? '童年往事已记下。' : operation.kind === 'thought' ? '思路已整理好。' : '')
     try { await syncDetail(epoch) } catch (e) {
       if (epoch === readEpoch) {
@@ -194,8 +200,13 @@ export const useGameStore = defineStore('game', () => {
   const freshId = () => crypto.randomUUID()
   function action(actionCode: string, sceneCode: string, bookCode?: string) {
     if (!detail.value) return
-    return commit('action', '正在结算这一回合', '/turn/' + path() + '/action',
+    return commit('action', '正在结算这次行动', '/turn/' + path() + '/action',
       { requestId: freshId(), actionCode, sceneCode, bookCode, expectedTurnNumber: detail.value.save.totalTurnNumber })
+  }
+  function endTurn() {
+    if (!detail.value || detail.value.save.status !== 'STUDYING') return
+    return commit('end-turn', '正在结束回合', '/turn/' + path() + '/end-turn',
+      { requestId: freshId(), expectedTurnNumber: detail.value.save.totalTurnNumber })
   }
   function free(sceneCode: string, text: string) {
     if (!detail.value) return
@@ -233,14 +244,20 @@ export const useGameStore = defineStore('game', () => {
       '/dialogue/' + path() + '/' + segment(dialogue.value.id) + '/message',
       { requestId: freshId(), text, expectedVersion: dialogue.value.version, endDialogue })
   }
+  function abandonDialogue() {
+    if (!dialogue.value || dialogue.value.ended) return
+    return commit('dialogue-abandon', '正在离开对话',
+      '/dialogue/' + path() + '/' + segment(dialogue.value.id) + '/abandon',
+      { requestId: freshId(), expectedVersion: dialogue.value.version })
+  }
   function askReading(bookCode: string, sceneCode: string) {
     if (!detail.value) return
-    return commit('question', '塾师正在准备体会题', '/book/' + path() + '/' + segment(bookCode) + '/player/question',
+    return commit('question', '塾师正在生成阅读题目', '/book/' + path() + '/' + segment(bookCode) + '/player/question',
       { sceneCode, expectedTurnNumber: detail.value.save.totalTurnNumber })
   }
   function answerReading(text: string) {
     if (!question.value) return
-    return commit('answer', '塾师正在评阅你的体会', '/book/' + path() + '/' + segment(question.value.bookCode) + '/player/answer',
+    return commit('answer', '塾师正在评阅你的阅读回答', '/book/' + path() + '/' + segment(question.value.bookCode) + '/player/answer',
       { questionId: question.value.questionId, text })
   }
   function thought(examId: string) { return commit('thought', '正在整理应考思路', '/exam/' + path() + '/' + segment(examId) + '/thought') }
@@ -252,7 +269,7 @@ export const useGameStore = defineStore('game', () => {
   function background() { return commit('background', '正在回想六岁以前的往事', '/save/' + path() + '/background') }
 
   return { detail, player, saves, regions, dialogue, question, pending, busy, loading, stale, error, busyLabel,
-    notice, outcome, canWrite, readyExam, sick, creationUncertain, confirmCreationChecked,
-    loadSaves, loadRegions, createLife, enter, refresh, retry, action, free, acquire, acquireSupply, pickup, useItem,
-    startDialogue, sendDialogue, askReading, answerReading, thought, submitExam, background }
+    notice, outcome, canWrite, readyExam, sick, majorActionUsed, aiStaminaCost, overworked, staminaBlockedReason, mainActionBlockedReason, creationUncertain, confirmCreationChecked,
+    loadSaves, loadRegions, createLife, enter, refresh, retry, action, endTurn, free, acquire, acquireSupply, pickup, useItem,
+    startDialogue, sendDialogue, abandonDialogue, askReading, answerReading, thought, submitExam, background }
 })

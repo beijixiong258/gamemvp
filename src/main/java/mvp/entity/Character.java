@@ -2,11 +2,16 @@ package mvp.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.AccessLevel;
+import lombok.EqualsAndHashCode;
+import lombok.Setter;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
+import mvp.engine.CharacterEngine;
 
 @Data
 @NoArgsConstructor
@@ -39,10 +44,29 @@ public class Character {
     private Integer characterJiaoji; //交际
     private Integer characterTineng; //体能
     private Integer characterJiankang; // 角色当前健康值
-    private Integer characterPilao; // 角色当前疲劳值
+    private Integer characterPilao; // 已消耗体力；当前体力由上限减去此值计算
+    private Long majorActionTurn; // 最近使用主要行动额度的累计回合
+    private Long aiGrowthTurn; // 最近领取AI正向成长的累计回合
+    // Hutool按字段发现Bean属性；保留展示字段以便缓存回执也输出动态体力，数据库不存储。
+    @TableField(exist = false)
+    @Setter(AccessLevel.NONE)
+    @EqualsAndHashCode.Exclude
+    private int stamina;
+    @TableField(exist = false)
+    @Setter(AccessLevel.NONE)
+    @EqualsAndHashCode.Exclude
+    private int maxStamina;
     private String birthday; // 人物在游戏纪年中的生日
     private String personalitySummary; // 人物性格与行为倾向摘要
     private String currentState; // 人物当前可供游戏逻辑和AI读取的状态摘要
     private String availableStageCodeJson; // 人物可以参与的成长阶段编码JSON数组
     private Boolean enabled; // 人物当前是否启用
+
+    public int getMaxStamina() {
+        return CharacterEngine.maxStamina(characterTineng == null ? 0 : characterTineng);
+    }
+
+    public int getStamina() {
+        return Math.max(0, getMaxStamina() - Math.max(0, characterPilao == null ? 0 : characterPilao));
+    }
 }
