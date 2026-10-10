@@ -58,6 +58,7 @@ export interface SupplyOffer {
 export interface ActionRules {
   aiStaminaCost: number; examStaminaCost: number; practiceStaminaCost: number; restStaminaRecovery: number
   restHealthRecovery: number; restHealthCap: number; consumableStaminaRecoveryLimit: number; overworkThreshold: number
+  dialogueMinStaminaCost: number; dialogueCharactersPerStamina: number
 }
 export interface SaveDetail {
   actionRules: ActionRules; backgroundGenerated: boolean; activeDialogue: Dialogue | null
@@ -71,9 +72,10 @@ export interface SaveSummary {
 }
 export interface Dialogue {
   id: string; saveId: string; actorId: string; counterpartId: string; sceneCode: string
-  startedTurnNumber: number; version: number; ended: boolean; messagesJson: string
+  startedTurnNumber: number; version: number; ended: boolean; messagesJson: string; staminaCost: number; staminaCharacters: number
 }
 export interface DialogueMessage { speaker: 'actor' | 'counterpart'; text: string; speakerName?: string; manualEnd?: boolean
+  numericChanges?: Record<string, number>; staminaCost?: number
   executedTrades?: { equipmentName: string; quantity: number; cost: number }[] }
 export interface ReadingQuestion {
   questionId: string; actorId: string; bookCode: string; bookName: string; sceneCode: string
@@ -84,7 +86,8 @@ export interface OperationResult {
   detail?: SaveDetail; dialogue?: Dialogue; reply?: string; summary?: string; narrative?: string; feedback?: string
   changes?: { progressGain: number; fatigueChange: number; healthChange: number; diceRoll: number | null
     abilityGain: Record<string, number>; readingRewardGain?: ReadingReward }
-  applied?: { detail: SaveDetail; summary: string; trades: { equipmentName: string; quantity: number; cost: number }[] }
+  applied?: { detail: SaveDetail; summary: string; numericChanges?: Record<string, number>; staminaCost: number
+    trades: { equipmentName: string; quantity: number; cost: number }[] }
   exam?: Exam; score?: number; evaluation?: string; equipmentName?: string; quantity?: number; cost?: number
 }
 export type OperationKind = 'action' | 'free' | 'acquire' | 'dialogue-start' | 'dialogue-message'

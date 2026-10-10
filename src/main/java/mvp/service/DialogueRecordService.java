@@ -14,14 +14,14 @@ public interface DialogueRecordService extends IService<DialogueRecord> {
     JSONObject start(String saveId, String actorId, StartDialogueCommand command);
 
     /**
-     * 发送消息或手动结束；AI可提前终止且第5轮必须返回结束标志，实际结算在短事务内。
+     * 每轮回复立即结算实际数值并扣体力；AI可提前结束且第5轮必须结束。手动结束免费且不再请求回复。
      *
      * @param command 请求编号、原文、预期版本与手动结束标志
      * @return 回应、真实交易结果、是否结束及最新对话版本
      */
     JSONObject respond(String saveId, String dialogueId, DialogueCommand command);
 
-    /** 无AI关闭对话，放弃尚未提交的成长；已经完成的交易不变。 */
+    /** 免费关闭对话，不再请求AI回复；保留各轮已扣体力、数值变化与交易，不重复结算。 */
     JSONObject abandon(String saveId, String dialogueId, AbandonDialogueCommand command);
 
     /**

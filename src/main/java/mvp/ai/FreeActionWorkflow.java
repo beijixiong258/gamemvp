@@ -90,9 +90,6 @@ public class FreeActionWorkflow {
                     .addNode("settle_driver", node_async(state -> {
                         ActionGuard.requireApproved(state.review());
                         ActionGuard.validateResolution(state.context(), state.interpretation(), state.resolution());
-                        if ("DIALOGUE".equals(state.context().getStr("mode")) && !state.resolution().endDialogue()) {
-                            return Map.of();
-                        }
                         return Map.of(FreeActionState.SETTLEMENT, characterEngine.applyDriver(
                                 state.character(), state.scholar(), state.resolution().driverPatch()));
                     }))

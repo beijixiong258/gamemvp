@@ -360,10 +360,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
                 || !Objects.equals(command.expectedTurnNumber(), context.save().getTotalTurnNumber())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "当前回合或阶段已变化，请刷新存档");
         }
-        if (dialogueRecordMapper.selectCount(com.baomidou.mybatisplus.core.toolkit.Wrappers.<DialogueRecord>lambdaQuery()
-                .eq(DialogueRecord::getSaveId, saveId).eq(DialogueRecord::getEnded, false)) > 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "请先结束或离开当前对话，再结束游戏回合");
-        }
+        requireNoActiveDialogue(saveId);
         markIllness(context);
         if (context.character().getSickTurnsRemaining() > 0) {
             advanceIllness(context);
@@ -724,7 +721,8 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
                 new ActionRules(GameRuleConstant.AI_OPERATION_STAMINA_COST, GameRuleConstant.PRACTICE_STAMINA_COST,
                         GameRuleConstant.REST_STAMINA_RECOVERY, GameRuleConstant.REST_HEALTH_RECOVERY,
                         GameRuleConstant.OVERWORK_STAMINA_THRESHOLD, GameRuleConstant.EXAM_STAMINA_COST,
-                        GameRuleConstant.REST_HEALTH_CAP, GameRuleConstant.CONSUMABLE_STAMINA_RECOVERY_LIMIT),
+                        GameRuleConstant.REST_HEALTH_CAP, GameRuleConstant.CONSUMABLE_STAMINA_RECOVERY_LIMIT,
+                        GameRuleConstant.DIALOGUE_MIN_STAMINA_COST, GameRuleConstant.DIALOGUE_CHARACTERS_PER_STAMINA),
                 eventRecordService.lambdaQuery().eq(EventRecord::getSaveId, saveId)
                         .eq(EventRecord::getEventCode, "CHILDHOOD_BACKGROUND").exists(),
                 dialogueRecordMapper.selectOne(com.baomidou.mybatisplus.core.toolkit.Wrappers.<DialogueRecord>lambdaQuery()
@@ -920,14 +918,15 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
                         before.character(), before.scholar()));
         return new TransactionTemplate(transactionManager).execute(status -> settleAiAction(before, command.requestId(),
                 payload, resolved.settlement(), resolved.acquisitions(), resolved.npcChanges(), resolved.sceneItemChanges(),
-                true, resolved.eventSummary(), resolved.lifeMilestone()));
+                true, resolved.eventSummary(), resolved.lifeMilestone(), GameRuleConstant.AI_OPERATION_STAMINA_COST));
     }
 
     @Override
     @Transactional
     public JSONObject settleAiAction(ActionContext before, String requestId, Object payload, DriverResult settlement,
                                       List<AcquisitionIntent> acquisitions, List<NpcIntent> npcChanges,
-                                      List<SceneItemChange> sceneItemChanges, boolean freeAction, String summary, boolean milestone) {
+                                      List<SceneItemChange> sceneItemChanges, boolean freeAction, String summary, boolean milestone,
+                                      int staminaCost) {
         ActorContext context = loadActor(before.saveId(), before.actorId(), true);
         JSONObject previous = eventRecordService.replay(before.saveId(), requestId, payload);
         if (previous != null) {
@@ -937,7 +936,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         if (!JSONUtil.parseObj(current.stateSnapshot()).equals(JSONUtil.parseObj(before.stateSnapshot()))) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "人物或回合已变化，本次AI结果未结算，请重新发起");
         }
-        requireStamina(current.character(), GameRuleConstant.AI_OPERATION_STAMINA_COST);
+        requireStamina(current.character(), staminaCost);
         JSONObject observedFacts = JSONUtil.parseObj(before.contextSummary());
         Set<String> observedNpcIds = observedIds(observedFacts, "npcs");
         observedNpcIds.remove(before.actorId());
@@ -964,17 +963,12 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         // 获取行为可能改变钱包，重新读取后再保存属性，避免覆盖刚刚完成的扣款。
         context = loadActor(before.saveId(), before.actorId(), true);
         if (settlement != null) {
-            boolean growthUsed = Objects.equals(context.character().getAiGrowthTurn(), before.turnNumber());
-            DriverResult permitted = growthUsed ? withoutPositiveGrowth(before.character(), before.scholar(), settlement) : settlement;
-            if (!growthUsed && hasPositiveGrowth(before.character(), before.scholar(), permitted)) {
-                context.character().setAiGrowthTurn(before.turnNumber());
-            }
-            applyCharacterState(context.character(), permitted.character());
-            applyScholarState(context.scholar(), permitted.scholar());
+            applyCharacterState(context.character(), settlement.character());
+            applyScholarState(context.scholar(), settlement.scholar());
             context.scholar().setLastActiveTurnNumber(before.turnNumber());
             careerProfileShushengService.updateById(context.scholar());
         }
-        consumeStamina(context, GameRuleConstant.AI_OPERATION_STAMINA_COST);
+        consumeStamina(context, staminaCost);
         markIllness(context);
         // AI操作不推进游戏回合；对象期限以当前回合计算。
         NpcChanges resolvedNpcs = characterService.applyNpcIntents(context.save(), context.character(),
@@ -994,6 +988,8 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
                 .set("summary", aiReceipt(freeAction, trades, resolvedItems))
                 .set("narrative", summary == null ? "" : summary).set("narrativeAuthority", "MODEL_NARRATIVE")
                 .set("trades", trades)
+                .set("staminaCost", staminaCost)
+                .set("numericChanges", aiNumericChanges(before, context))
                 .set("resolvedNpcs", resolvedNpcs.characters()).set("sceneItems", resolvedItems)
                 .set("detail", buildDetail(context));
         // 普通自由行动独立评估记忆；已有重要节点时只记节点，避免同一次经历重复生成。
@@ -1002,6 +998,27 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
                 eventCode, context.save().getTotalTurnNumber(), result, confirmedParticipants);
         characterService.archiveExpired(before.saveId(), context.save().getTotalTurnNumber());
         return result;
+    }
+
+    /** 记录本轮真正落库的数字变化，供逐轮回执展示；后续数字字段沿用相同结算时机。 */
+    private JSONObject aiNumericChanges(ActionContext before, ActorContext after) {
+        JSONObject oldValues = JSONUtil.parseObj(before.character());
+        oldValues.putAll(JSONUtil.parseObj(before.scholar()));
+        oldValues.set("stamina", before.character().stamina());
+        JSONObject newValues = JSONUtil.parseObj(characterState(after.character()));
+        newValues.putAll(JSONUtil.parseObj(scholarState(after.scholar())));
+        newValues.set("stamina", after.character().getStamina());
+        oldValues.remove("characterPilao");
+        JSONObject changes = new JSONObject();
+        for (String key : oldValues.keySet()) {
+            if (oldValues.get(key) instanceof Number oldValue && newValues.get(key) instanceof Number newValue) {
+                int delta = newValue.intValue() - oldValue.intValue();
+                if (delta != 0) {
+                    changes.set(key, delta);
+                }
+            }
+        }
+        return changes;
     }
 
     /** 结算文字只取实际提交结果，模型叙事在独立字段展示，不能成为付款/所有权凭证。 */
@@ -1161,7 +1178,7 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         return context.restoredReadingReward();
     }
 
-    /** 全部持久化人物与书生字段都参与比较，包含钱包、成长额度和主要行动额度。 */
+    /** 全部持久化人物与书生字段都参与比较，包含钱包和主要行动额度。 */
     private String stateSnapshot(ActorContext context) {
         return new JSONObject().set("save", context.save()).set("character", context.character())
                 .set("scholar", context.scholar()).toString();
@@ -1175,6 +1192,13 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
 
     private void requireMajorActionAvailable(ActorContext context) {
         requireMajorActionAvailable(context.save().getTotalTurnNumber(), context.character().getMajorActionTurn());
+    }
+
+    private void requireNoActiveDialogue(String saveId) {
+        if (dialogueRecordMapper.selectCount(com.baomidou.mybatisplus.core.toolkit.Wrappers.<DialogueRecord>lambdaQuery()
+                .eq(DialogueRecord::getSaveId, saveId).eq(DialogueRecord::getEnded, false)) > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "请先结束或离开当前对话，再结束游戏回合");
+        }
     }
 
     private void requireMajorActionAvailable(long turn, Long usedTurn) {
@@ -1193,38 +1217,6 @@ public class GameSaveServiceImpl extends ServiceImpl<GameSaveMapper, GameSave> i
         requireStamina(characterState(context.character()), cost);
         applyCharacterState(context.character(), characterEngine.consumeStamina(characterState(context.character()), cost));
         characterService.updateById(context.character());
-    }
-
-    private boolean hasPositiveGrowth(CharacterState before, ScholarState scholarBefore, DriverResult after) {
-        CharacterState character = after.character();
-        ScholarState scholar = after.scholar();
-        return character.characterZhili() > before.characterZhili()
-                || character.characterDaode() > before.characterDaode()
-                || character.characterZhengzhi() > before.characterZhengzhi()
-                || character.characterJiaoji() > before.characterJiaoji()
-                || character.characterTineng() > before.characterTineng()
-                || scholar.abilityShizi() > scholarBefore.abilityShizi()
-                || scholar.abilityJingyi() > scholarBefore.abilityJingyi()
-                || scholar.abilityWenzhang() > scholarBefore.abilityWenzhang()
-                || scholar.abilityCelun() > scholarBefore.abilityCelun()
-                || scholar.abilityWenxue() > scholarBefore.abilityWenxue();
-    }
-
-    private DriverResult withoutPositiveGrowth(CharacterState before, ScholarState scholarBefore, DriverResult proposed) {
-        CharacterState character = proposed.character();
-        ScholarState scholar = proposed.scholar();
-        int fitness = Math.min(before.characterTineng(), character.characterTineng());
-        int capacity = CharacterEngine.maxStamina(fitness);
-        return new DriverResult(new CharacterState(Math.min(before.characterZhili(), character.characterZhili()),
-                Math.min(before.characterDaode(), character.characterDaode()),
-                Math.min(before.characterZhengzhi(), character.characterZhengzhi()),
-                Math.min(before.characterJiaoji(), character.characterJiaoji()), fitness,
-                character.characterJiankang(), capacity - Math.min(capacity, before.stamina())),
-                new ScholarState(Math.min(scholarBefore.abilityShizi(), scholar.abilityShizi()),
-                        Math.min(scholarBefore.abilityJingyi(), scholar.abilityJingyi()),
-                        Math.min(scholarBefore.abilityWenzhang(), scholar.abilityWenzhang()),
-                        Math.min(scholarBefore.abilityCelun(), scholar.abilityCelun()),
-                        Math.min(scholarBefore.abilityWenxue(), scholar.abilityWenxue())), proposed.exhaustionDamage());
     }
 
     private record PlayerReadingAttempt(String actorId, long turnNumber, String sceneCode, CharacterState character,

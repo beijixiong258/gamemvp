@@ -142,21 +142,23 @@ public interface GameSaveService extends IService<GameSave> {
     JSONObject executeFreeAction(String saveId, String actorId, FreeActionCommand command);
 
     /**
-     * 在短事务中核对模型调用前快照，保存属性、交易与本次AI业务费用，不推进日历。
+     * 在短事务中核对模型调用前快照，同时保存本次属性、交易和体力扣款。
      *
      * @param requestId 结算请求编号
-     * @param settlement 引擎计算结果，非结束对话时为空
+     * @param settlement 本次行动或本轮对话的引擎计算结果
      * @param acquisitions 本次明确执行的获取行为
      * @param npcChanges 本次实际观察或互动的人物身份与保留决策
      * @param sceneItemChanges 本次确认的场景物品及保留决策
-     * @param freeAction 是否为自定义行动（用于事件分类；不会推进游戏回合）
+     * @param freeAction 是否为自定义行动（区分事件；不会推进游戏回合）
      * @param summary 行为摘要
      * @param milestone 是否记录人生节点
+     * @param staminaCost 本次实际体力消耗；对话只收累计字数成本减去已扣部分的差额
      * @return 已执行结果；重复请求返回原结果
      */
     JSONObject settleAiAction(ActionContext before, String requestId, Object payload, DriverResult settlement,
                              List<AcquisitionIntent> acquisitions, List<NpcIntent> npcChanges,
-                             List<SceneItemChange> sceneItemChanges, boolean freeAction, String summary, boolean milestone);
+                             List<SceneItemChange> sceneItemChanges, boolean freeAction, String summary, boolean milestone,
+                             int staminaCost);
 
     record StartLifeCommand(
             String characterName,
@@ -205,7 +207,8 @@ public interface GameSaveService extends IService<GameSave> {
 
     record ActionRules(int aiStaminaCost, int practiceStaminaCost, int restStaminaRecovery,
                        int restHealthRecovery, int overworkThreshold, int examStaminaCost,
-                       int restHealthCap, int consumableStaminaRecoveryLimit) {
+                       int restHealthCap, int consumableStaminaRecoveryLimit,
+                       int dialogueMinStaminaCost, int dialogueCharactersPerStamina) {
     }
 
     record ActionChanges(

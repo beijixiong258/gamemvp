@@ -46,7 +46,7 @@ public class Character {
     private Integer characterJiankang; // 角色当前健康值
     private Integer characterPilao; // 已消耗体力；当前体力由上限减去此值计算
     private Long majorActionTurn; // 最近使用主要行动额度的累计回合
-    private Long aiGrowthTurn; // 最近领取AI正向成长的累计回合
+    private Long aiGrowthTurn; // 旧存档兼容字段，不再限制AI成长次数
     // Hutool按字段发现Bean属性；保留展示字段以便缓存回执也输出动态体力，数据库不存储。
     @TableField(exist = false)
     @Setter(AccessLevel.NONE)

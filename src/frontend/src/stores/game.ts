@@ -240,7 +240,7 @@ export const useGameStore = defineStore('game', () => {
   }
   function sendDialogue(text: string, endDialogue = false) {
     if (!dialogue.value || dialogue.value.ended) return
-    return commit('dialogue-message', endDialogue ? '正在整理这次交谈' : '对方正在回应',
+    return commit('dialogue-message', endDialogue ? '正在结束对话' : '对方正在回应',
       '/dialogue/' + path() + '/' + segment(dialogue.value.id) + '/message',
       { requestId: freshId(), text, expectedVersion: dialogue.value.version, endDialogue })
   }

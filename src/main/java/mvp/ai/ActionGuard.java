@@ -82,6 +82,7 @@ final class ActionGuard {
                     .set("untrustedDescription", counterpart.getStr("currentState")));
             source(sources, "fact:counterpart", "SELF_CONTEXT", "counterpart", counterpart.getStr("id"));
             context.set("dialogueRound", input.getInt("dialogueRound")).set("maxDialogueRounds", input.getInt("maxDialogueRounds"));
+            context.set("maxReplyCharacters", input.getInt("maxReplyCharacters", 1600));
             JSONArray history = new JSONArray();
             for (JSONObject message : objects(input.getJSONArray("history"))) {
                 boolean manualEnd = Boolean.TRUE.equals(message.getBool("manualEnd"));
@@ -156,13 +157,13 @@ final class ActionGuard {
         boolean manual = Boolean.TRUE.equals(context.getBool("manualEnd"));
         if (dialogue) {
             require(!result.lifeMilestone(), "DIALOGUE_MILESTONE");
-            require(result.endDialogue() || !changed, "EARLY_DRIVER");
+            require(result.narrative().length() <= context.getInt("maxReplyCharacters", 1600), "DIALOGUE_REPLY_LENGTH");
             require(context.getInt("dialogueRound") < context.getInt("maxDialogueRounds") || result.endDialogue(), "DIALOGUE_END");
         } else {
             require(!result.endDialogue(), "FREE_ACTION_END");
         }
         if (manual) {
-            require(result.endDialogue() && result.acquisitions().isEmpty() && result.npcChanges().isEmpty()
+            require(result.endDialogue() && !changed && result.acquisitions().isEmpty() && result.npcChanges().isEmpty()
                     && result.sceneItemChanges().isEmpty(), "MANUAL_END_EFFECT");
         }
         Map<String, Set<String>> evidence = new HashMap<>();
@@ -177,7 +178,7 @@ final class ActionGuard {
         take(evidence, EffectKind.NARRATIVE, 0);
         if (changed) {
             Set<String> ids = take(evidence, EffectKind.DRIVERS, 0);
-            require(ids.stream().anyMatch(id -> "current".equals(id) || (dialogue && id.startsWith("history:"))), "DRIVER_SOURCE");
+            require(ids.contains("current"), "DRIVER_SOURCE");
         }
         if (result.lifeMilestone()) {
             require(take(evidence, EffectKind.MILESTONE, 0).contains("current"), "MILESTONE_SOURCE");

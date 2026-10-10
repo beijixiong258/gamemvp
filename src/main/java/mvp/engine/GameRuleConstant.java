@@ -20,6 +20,8 @@ public final class GameRuleConstant {
     public static final int KNOWLEDGE_PER_EXAM_POINT = 2;
     public static final int EXAM_LUCK_AMPLITUDE = 25;
     public static final int AI_OPERATION_STAMINA_COST = 15;
+    public static final int DIALOGUE_MIN_STAMINA_COST = 15;
+    public static final int DIALOGUE_CHARACTERS_PER_STAMINA = 100;
     public static final int EXAM_STAMINA_COST = 5;
     public static final int PRACTICE_STAMINA_COST = 8;
     public static final int PRACTICE_WRITING_BASE_GAIN = 2;
