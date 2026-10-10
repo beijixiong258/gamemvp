@@ -1,5 +1,6 @@
 package mvp.service.impl;
 
+import cn.hutool.json.JSONUtil;
 import mvp.ai.GameClient;
 import mvp.engine.ExamEngine;
 import mvp.engine.TurnEngine;
@@ -11,6 +12,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -43,6 +45,22 @@ class ExamAnswerScoringTest {
         assertEquals(14, weakAnswer.result().finalScore());
         assertEquals(-86, weakAnswer.result().effectiveContentModifier());
         assertTrue(weakAnswer.content().contains("答卷评分：20/100"));
+    }
+
+    @Test
+    void gradingReceivesOnlyQuestionRubricAndPlayerAnswer() {
+        when(client.chat(eq("PROMPT_EXAM_EVALUATION"), anyString(), eq(ExamRecordServiceImpl.EvaluationOutput.class)))
+                .thenAnswer(call -> {
+                    var input = JSONUtil.parseObj((String) call.getArgument(1));
+                    assertEquals(Set.of("examType", "questionText", "scoringPoints", "playerInput"), input.keySet());
+                    assertEquals("玩家原文", input.getStr("playerInput"));
+                    assertFalse(input.getJSONArray("scoringPoints").isEmpty());
+                    return new ExamRecordServiceImpl.EvaluationOutput(BigDecimal.valueOf(80), "准确回应题目。");
+                });
+        when(client.chat(eq("PROMPT_EXAM_ANSWER"), anyString(), eq(ExamRecordServiceImpl.NarrativeOutput.class)))
+                .thenReturn(new ExamRecordServiceImpl.NarrativeOutput("", "考试通过。"));
+        service.resolvePlayer(ready(36), "玩家原文", "{\"extraExpectation\":\"治国平天下\"}");
+        verify(client).chat(eq("PROMPT_EXAM_EVALUATION"), anyString(), eq(ExamRecordServiceImpl.EvaluationOutput.class));
     }
 
     @Test

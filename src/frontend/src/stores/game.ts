@@ -78,8 +78,7 @@ export const useGameStore = defineStore('game', () => {
       confirmCreationChecked()
       return result.save.id
     } catch (e) {
-      creationUncertain.value = !(e instanceof ApiError && e.status >= 400 && e.status < 500
-        && e.status !== 408 && e.status !== 429)
+      creationUncertain.value = !(e instanceof ApiError && e.requestRejected)
       writeLocal('mvp:creation-uncertain', creationUncertain.value || null)
       error.value = message(e)
       return null
@@ -153,7 +152,8 @@ export const useGameStore = defineStore('game', () => {
     } catch (e) {
       error.value = message(e)
       const status = e instanceof ApiError ? e.status : 0
-      if (status >= 400 && status < 500 && status !== 408 && status !== 429) clearPending()
+      // 明确拒绝允许修改输入或离开；结果未知仍沿用原请求，防止重复结算。
+      if (e instanceof ApiError && e.requestRejected) clearPending()
       if (status === 409) {
         try { await syncDetail(epoch) } catch { if (epoch === readEpoch) stale.value = true }
       }

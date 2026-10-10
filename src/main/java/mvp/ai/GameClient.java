@@ -53,7 +53,7 @@ public class GameClient {
             return result;
         } catch (RuntimeException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                    "AI调用失败，请检查网络或模型账户余额后重试", exception);
+                    "AI调用或输出解析失败，本次结果未采用，请稍后重试", exception);
         }
     }
 

@@ -19,6 +19,8 @@ import mvp.mapper.EventRecordMapper;
 import mvp.mapper.GameSaveMapper;
 import mvp.mapper.MemoryRecordMapper;
 import mvp.service.MemoryRecordService;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -60,19 +62,23 @@ public class MemoryRecordServiceImpl extends ServiceImpl<MemoryRecordMapper, Mem
     private final EventRecordMapper eventRecordMapper;
     private final CharacterMapper characterMapper;
     private final GameSaveMapper gameSaveMapper;
+    private final TaskExecutor memoryExecutor;
     private final TransactionTemplate withoutTransaction;
     private final TransactionTemplate indexTransaction;
     private final Map<String, Instant> retryAfter = new ConcurrentHashMap<>();
     private final Map<String, RepairCursor> repairCursors = new ConcurrentHashMap<>();
+    private final Set<String> pendingMemoryWork = ConcurrentHashMap.newKeySet();
     private final Object[] memoryLocks = new Object[64];
 
     public MemoryRecordServiceImpl(MemoryResolver memoryResolver, EventRecordMapper eventRecordMapper,
                                    CharacterMapper characterMapper, GameSaveMapper gameSaveMapper,
-                                   PlatformTransactionManager transactionManager) {
+                                   PlatformTransactionManager transactionManager,
+                                   @Qualifier("applicationTaskExecutor") TaskExecutor memoryExecutor) {
         this.memoryResolver = memoryResolver;
         this.eventRecordMapper = eventRecordMapper;
         this.characterMapper = characterMapper;
         this.gameSaveMapper = gameSaveMapper;
+        this.memoryExecutor = memoryExecutor;
         this.withoutTransaction = new TransactionTemplate(transactionManager);
         this.withoutTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_NOT_SUPPORTED);
         this.indexTransaction = new TransactionTemplate(transactionManager);
@@ -88,30 +94,45 @@ public class MemoryRecordServiceImpl extends ServiceImpl<MemoryRecordMapper, Mem
             return;
         }
         String eventId = event.getId();
-        Runnable remember = () -> {
-            try {
-                withoutTransaction.executeWithoutResult(status -> {
-                    EventRecord committed = eventRecordMapper.selectById(eventId);
-                    if (eligible(committed)) {
-                        for (Character owner : participants(committed)) {
-                            rememberSafely(committed, owner.getId());
-                        }
-                    }
-                });
-            } catch (RuntimeException exception) {
-                log.warn("事件{}已提交，记忆生成待后续回忆补齐：{}", eventId, exception.getClass().getSimpleName());
+        Runnable remember = () -> withoutTransaction.executeWithoutResult(status -> {
+            EventRecord committed = eventRecordMapper.selectById(eventId);
+            if (eligible(committed)) {
+                for (Character owner : participants(committed)) {
+                    rememberSafely(committed, owner.getId());
+                }
             }
-        };
+        });
         if (TransactionSynchronizationManager.isActualTransactionActive()
                 && TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    remember.run();
+                    enqueueMemory("event:" + eventId, remember);
                 }
             });
         } else {
-            remember.run();
+            enqueueMemory("event:" + eventId, remember);
+        }
+    }
+
+    /** 后台摘要和补齐不延迟游戏回执；同一任务排队或运行期间不重复提交。 */
+    private void enqueueMemory(String key, Runnable work) {
+        if (!pendingMemoryWork.add(key)) {
+            return;
+        }
+        try {
+            memoryExecutor.execute(() -> {
+                try {
+                    work.run();
+                } catch (RuntimeException exception) {
+                    log.warn("记忆任务{}失败，待后续回忆补齐：{}", key, exception.getClass().getSimpleName());
+                } finally {
+                    pendingMemoryWork.remove(key);
+                }
+            });
+        } catch (RuntimeException exception) {
+            pendingMemoryWork.remove(key);
+            log.warn("记忆任务{}暂未入队，不影响已提交结果：{}", key, exception.getClass().getSimpleName());
         }
     }
 
@@ -137,19 +158,23 @@ public class MemoryRecordServiceImpl extends ServiceImpl<MemoryRecordMapper, Mem
                 }
                 long currentTurn = save.getTotalTurnNumber();
                 archiveExpired(saveId, ownerCharacterId, currentTurn);
-                int remainingRepairs = REPAIR_BATCH_SIZE;
                 List<MemoryRecord> records = candidates(saveId, ownerCharacterId, relatedId, currentTurn, null);
-                for (MemoryRecord record : records) {
-                    if (remainingRepairs == 0) {
-                        break;
-                    }
-                    if (readSummary(record) == null && canRetry(record.getSourceEventId(), ownerCharacterId)) {
-                        remainingRepairs--;
-                        rememberSafely(eventRecordMapper.selectById(record.getSourceEventId()), ownerCharacterId);
-                    }
-                }
-                backfillMissing(saveId, ownerCharacterId, remainingRepairs);
-                return buildContext(candidates(saveId, ownerCharacterId, relatedId, currentTurn, null), budget);
+                // 回忆只读已生成的摘要；缺口在后台补齐，不能等模型或另一任务持有的记忆锁。
+                enqueueMemory("repair:" + saveId + ":" + ownerCharacterId,
+                        () -> withoutTransaction.executeWithoutResult(ignored -> {
+                            int remainingRepairs = REPAIR_BATCH_SIZE;
+                            for (MemoryRecord record : records) {
+                                if (remainingRepairs == 0) {
+                                    break;
+                                }
+                                if (readSummary(record) == null && canRetry(record.getSourceEventId(), ownerCharacterId)) {
+                                    remainingRepairs--;
+                                    rememberSafely(eventRecordMapper.selectById(record.getSourceEventId()), ownerCharacterId);
+                                }
+                            }
+                            backfillMissing(saveId, ownerCharacterId, remainingRepairs);
+                        }));
+                return buildContext(records, budget);
             });
             return result == null ? "[]" : result;
         } catch (RuntimeException exception) {

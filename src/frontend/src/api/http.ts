@@ -1,5 +1,9 @@
 export class ApiError extends Error {
-  constructor(public status: number, message: string) { super(message); this.name = 'ApiError' }
+  constructor(public status: number, message: string, public requestRejected = false) {
+    super(message)
+    this.name = 'ApiError'
+    this.requestRejected = requestRejected || (status >= 400 && status < 500 && status !== 408 && status !== 429)
+  }
 }
 export async function request<T>(path: string, method: 'GET' | 'POST' = 'GET', body?: unknown): Promise<T> {
   const controller = new AbortController()
@@ -22,7 +26,9 @@ export async function request<T>(path: string, method: 'GET' | 'POST' = 'GET', b
         : response.status === 502 ? '暂时没有收到完整回应，请保留原请求重试。'
         : response.status === 404 ? '没有找到对应的存档或记录。' : '这次操作未能完成，请稍后重试。'
       // 只显示简短中文业务说明，不把堆栈、HTML或内部英文异常展示给玩家。
-      throw new ApiError(response.status, reason && reason.length < 220 && /[\u4e00-\u9fff]/.test(reason) && !/[<>]/.test(reason) ? reason : fallback)
+      throw new ApiError(response.status,
+        reason && reason.length < 220 && /[\u4e00-\u9fff]/.test(reason) && !/[<>]/.test(reason) ? reason : fallback,
+        response.status === 502 && problem.requestRejected === true)
     }
     return data as T
   } catch (error) {

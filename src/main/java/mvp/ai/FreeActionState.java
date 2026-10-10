@@ -1,6 +1,7 @@
 package mvp.ai;
 
 import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONUtil;
 import mvp.engine.CharacterEngine.CharacterState;
 import mvp.engine.CharacterEngine.DriverResult;
 import mvp.engine.CharacterEngine.ScholarState;
@@ -19,7 +20,8 @@ public final class FreeActionState extends AgentState {
 
     public FreeActionState(Map<String, Object> data) { super(data); }
 
-    JSONObject context() { return this.<JSONObject>value(CONTEXT).orElseThrow(); }
+    // 图的默认序列化器把 Map（包括 JSONObject）还原为 HashMap；在边界恢复 JSON 视图。
+    JSONObject context() { return JSONUtil.parseObj(value(CONTEXT).orElseThrow()); }
     CharacterState character() { return this.<CharacterState>value(CHARACTER).orElseThrow(); }
     ScholarState scholar() { return this.<ScholarState>value(SCHOLAR).orElseThrow(); }
     FreeActionResolver.Interpretation interpretation() {

@@ -200,7 +200,7 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
             return completedResolution(exam, PLAYER, playerInput);
         }
         requireReady(exam);
-        JSONObject input = examContext(exam, characterContext).set("playerInput", playerInput);
+        JSONObject input = questionContext(exam).set("playerInput", playerInput);
         EvaluationOutput evaluation = gameClient.chat(definitionFor(exam.getExamType()).evaluationPromptCode(),
                 input.toString(), EvaluationOutput.class);
         if (evaluation == null || evaluation.answerScore() == null || evaluation.answerScore().signum() < 0
@@ -254,11 +254,16 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
         return lambdaQuery().eq(ExamRecord::getSaveId, saveId).orderByAsc(ExamRecord::getTurnNumber).list();
     }
 
-    /** 思路与评价只接收能力和学习事实，不接收尚未公布的骰点及最终成绩。 */
-    private JSONObject examContext(ExamRecord exam, String characterContext) {
+    /** 评卷只接收原题、评分点和答卷，避免人物能力与背景成为额外评分标准。 */
+    private JSONObject questionContext(ExamRecord exam) {
         return new JSONObject()
                 .set("examType", exam.getExamType()).set("questionText", exam.getQuestionText())
-                .set("scoringPoints", definitionFor(exam.getExamType()).scoringPoints())
+                .set("scoringPoints", definitionFor(exam.getExamType()).scoringPoints());
+    }
+
+    /** 应考思路接收能力和学习事实，不接收尚未公布的骰点及最终成绩。 */
+    private JSONObject examContext(ExamRecord exam, String characterContext) {
+        return questionContext(exam)
                 .set("baseAbilityScore", exam.getBaseAbilityScore()).set("stateOffset", exam.getStateOffset())
                 .set("knowledgeTotal", exam.getKnowledgeTotal())
                 .set("thoughtLevel", examEngine.thoughtLevel(exam.getBaseAbilityScore() + exam.getStateOffset()).name())

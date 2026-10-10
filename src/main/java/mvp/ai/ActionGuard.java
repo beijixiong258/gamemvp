@@ -3,6 +3,7 @@ package mvp.ai;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
+import lombok.extern.slf4j.Slf4j;
 import mvp.ai.FreeActionResolver.*;
 import mvp.engine.CharacterEngine.DriverPatch;
 import mvp.service.EquipmentRecordService.ScenePropTemplate;
@@ -13,6 +14,7 @@ import java.math.BigDecimal;
 import java.util.*;
 
 /** 模型之外的上下文投影与行动契约；不代替智能体判断人物动机。 */
+@Slf4j
 final class ActionGuard {
     private ActionGuard() { }
 
@@ -242,8 +244,11 @@ final class ActionGuard {
     }
 
     static void requireApproved(Review review) {
-        require(review != null && review.approved() && review.violations() != null
-                && review.violations().isEmpty() && text(review.reason(), 600), "SEMANTIC_REVIEW");
+        if (review == null || !review.approved() || review.violations() == null
+                || !review.violations().isEmpty() || !text(review.reason(), 600)) {
+            log.warn("AI行动复核拒绝：{}", review);
+            throw rejected("SEMANTIC_REVIEW");
+        }
     }
 
     private static boolean validateDriver(DriverPatch patch) {
